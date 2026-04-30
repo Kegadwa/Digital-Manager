@@ -50,8 +50,9 @@ export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
   const isCash = method.type === "cash";
 
   const TypeIcon = isCash ? Banknote : isWallet ? Wallet : isBank ? Building2 : null;
-  const last4 = method.last4 || "••••";
-  const number = `•••• •••• •••• ${last4}`;
+  const cardNumber = method.cardNumber || "••••••••••••••••";
+  const formattedNumber = cardNumber.match(/.{1,4}/g)?.join(' ') || cardNumber;
+  const balance = method.balance !== undefined ? `$${method.balance.toLocaleString()}` : "$0";
 
   return (
     <div
@@ -101,19 +102,33 @@ export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
 
         {/* Middle: number or name */}
         {isCard ? (
-          <p className="font-mono text-base sm:text-lg tracking-[0.18em] tabular-nums drop-shadow-sm">{number}</p>
+          <div>
+            <p className="font-mono text-base sm:text-lg tracking-[0.18em] tabular-nums drop-shadow-sm">{formattedNumber}</p>
+            <div className="flex gap-4 mt-1.5 font-mono text-xs opacity-80 tracking-widest">
+              <p>CVC {method.cvc || "•••"}</p>
+              <p>BAL {balance}</p>
+            </div>
+          </div>
         ) : isBank ? (
           <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-widest opacity-70">Account</p>
-            <p className="font-mono text-sm tracking-widest">IBAN •••• 8821</p>
+            <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
+            <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>
           </div>
         ) : isWallet ? (
           <div className="space-y-1">
             <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
-            <p className="font-display text-2xl font-bold tabular-nums">$1,240</p>
+            <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>
+          </div>
+        ) : isCash ? (
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
+            <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>
           </div>
         ) : (
-          <p className="font-display text-2xl font-bold">{method.name}</p>
+          <div className="space-y-1">
+            <p className="font-display text-2xl font-bold">{method.name}</p>
+            <p className="text-[10px] uppercase tracking-widest opacity-70">BAL {balance}</p>
+          </div>
         )}
 
         {/* Bottom row */}

@@ -28,12 +28,26 @@ export interface PaymentMethod {
   id: string;
   name: string;
   type: "cash" | "card" | "bank" | "wallet";
-  last4?: string;
+  balance: number;
+  cardNumber?: string;
+  cvc?: string;
   color?: string;
   holder?: string;
   expiry?: string;
   brand?: CardBrand;
 }
+
+export interface Loan {
+  id: string;
+  lender: string;
+  principal: number;
+  totalRepayable: number;
+  amountPaid: number;
+  date: string;
+  status: "active" | "paid";
+  description?: string;
+}
+
 
 export interface Category {
   id: string;

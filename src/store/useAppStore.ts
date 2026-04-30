@@ -9,7 +9,7 @@ import {
   collection
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Task, Transaction, Note, FileItem, Project, Category, PaymentMethod, ProjectActivity, PortfolioProject, Experience, Education, Certification, Tool, DesignProject } from "@/types";
+import type { Task, Transaction, Note, FileItem, Project, Category, PaymentMethod, ProjectActivity, PortfolioProject, Experience, Education, Certification, Tool, DesignProject, Loan } from "@/types";
 
 export const KEYS = {
   tasks: "dh_tasks",
@@ -19,6 +19,7 @@ export const KEYS = {
   projects: "dh_projects",
   categories: "dh_categories",
   methods: "dh_methods",
+  loans: "dh_loans",
   seeded: "dh_seeded",
   // Portfolio keys
   portfolioAbout: "p_about",
@@ -46,9 +47,9 @@ const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 const DEFAULT_METHODS: PaymentMethod[] = [
-  { id: "1", name: "Main Bank", type: "bank", color: "#0B1F3A", holder: "KEITH K.", last4: "4421" },
-  { id: "2", name: "Visa Gold", type: "card", color: "#1A1A1A", holder: "KEITH K.", last4: "8892", brand: "visa", expiry: "12/28" },
-  { id: "3", name: "M-Pesa", type: "wallet", color: "#2ECC71", holder: "KEITH K." },
+  { id: "1", name: "Main Bank", type: "bank", color: "#0B1F3A", holder: "KEITH K.", cardNumber: "4421", balance: 5000 },
+  { id: "2", name: "Visa Gold", type: "card", color: "#1A1A1A", holder: "KEITH K.", cardNumber: "4111222233338892", brand: "visa", expiry: "12/28", cvc: "123", balance: 1200 },
+  { id: "3", name: "M-Pesa", type: "wallet", color: "#2ECC71", holder: "KEITH K.", balance: 350 },
 ];
 
 function seedData() {
@@ -72,6 +73,7 @@ function seedData() {
     [KEYS.portfolioDesignProjects]: [],
     [KEYS.categories]: DEFAULT_CATEGORIES,
     [KEYS.methods]: DEFAULT_METHODS,
+    [KEYS.loans]: [],
   };
 }
 
@@ -177,8 +179,22 @@ export function useTasks() {
 
 export function useTransactions() {
   const [transactions, setTransactions] = usePersistedList<Transaction>(KEYS.transactions);
-  const addTransaction = (t: Partial<Transaction>) => setTransactions([{ ...t, id: uid() } as Transaction, ...transactions]);
-  const removeTransaction = (id: string) => setTransactions(transactions.filter(t => t.id !== id));
+  const [methods, setMethods] = usePersistedList<PaymentMethod>(KEYS.methods);
+
+  const addTransaction = (t: Partial<Transaction>) => {
+    setTransactions([{ ...t, id: uid() } as Transaction, ...transactions]);
+    if (t.methodId) {
+      setMethods(methods.map(m => m.id === t.methodId ? { ...m, balance: m.balance + (t.type === "income" ? (t.amount || 0) : -(t.amount || 0)) } : m));
+    }
+  };
+
+  const removeTransaction = (id: string) => {
+    const t = transactions.find(tx => tx.id === id);
+    setTransactions(transactions.filter(tx => tx.id !== id));
+    if (t && t.methodId) {
+      setMethods(methods.map(m => m.id === t.methodId ? { ...m, balance: m.balance - (t.type === "income" ? t.amount : -t.amount) } : m));
+    }
+  };
   return { transactions, addTransaction, removeTransaction };
 }
 
@@ -216,9 +232,42 @@ export function useCategories() {
 
 export function usePaymentMethods() {
   const [methods, setMethods] = usePersistedList<PaymentMethod>(KEYS.methods);
-  const addMethod = (m: Partial<PaymentMethod>) => setMethods([{ ...m, id: uid() } as PaymentMethod, ...methods]);
+  const addMethod = (m: Partial<PaymentMethod>) => setMethods([{ ...m, id: uid(), balance: m.balance || 0 } as PaymentMethod, ...methods]);
   const removeMethod = (id: string) => setMethods(methods.filter(m => m.id !== id));
-  return { methods, addMethod, removeMethod };
+  const updateMethod = (id: string, updates: Partial<PaymentMethod>) => setMethods(methods.map(m => m.id === id ? { ...m, ...updates } : m));
+  return { methods, addMethod, removeMethod, updateMethod };
+}
+
+export function useLoans() {
+  const [loans, setLoans] = usePersistedList<Loan>(KEYS.loans);
+  const { addTransaction } = useTransactions();
+
+  const addLoan = (l: Partial<Loan>) => setLoans([{ ...l, id: uid(), amountPaid: 0, status: "active" } as Loan, ...loans]);
+  const removeLoan = (id: string) => setLoans(loans.filter(l => l.id !== id));
+  const updateLoan = (id: string, updates: Partial<Loan>) => setLoans(loans.map(l => l.id === id ? { ...l, ...updates } : l));
+  
+  const repayLoan = (id: string, amount: number, methodId: string, categoryId: string) => {
+    const loan = loans.find(l => l.id === id);
+    if (!loan) return;
+    
+    addTransaction({
+      type: "expense",
+      amount,
+      categoryId,
+      methodId,
+      description: `Loan Repayment: ${loan.lender}`,
+      date: new Date().toISOString()
+    });
+
+    const newPaid = loan.amountPaid + amount;
+    setLoans(loans.map(l => l.id === id ? { 
+      ...l, 
+      amountPaid: newPaid,
+      status: newPaid >= l.totalRepayable ? "paid" : "active"
+    } : l));
+  };
+
+  return { loans, addLoan, removeLoan, updateLoan, repayLoan };
 }
 
 export function usePortfolio() {
