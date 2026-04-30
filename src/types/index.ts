@@ -27,14 +27,25 @@ export type CardBrand = "visa" | "mastercard" | "amex" | "other";
 export interface PaymentMethod {
   id: string;
   name: string;
-  type: "cash" | "card" | "bank" | "wallet";
+  type: "cash" | "card" | "bank";
   balance: number;
+  currency: string;
   cardNumber?: string;
   cvc?: string;
   color?: string;
   holder?: string;
   expiry?: string;
   brand?: CardBrand;
+  linkedAccountId?: string;
+  denominations?: Record<string, number>;
+}
+
+export interface SavingsSource {
+  id: string;
+  name: string;
+  amount: number;
+  methodId?: string;
+  date: string;
 }
 
 export interface Loan {
@@ -43,6 +54,8 @@ export interface Loan {
   principal: number;
   totalRepayable: number;
   amountPaid: number;
+  interestRate: number;
+  interestType: "flat" | "reducing";
   date: string;
   status: "active" | "paid";
   description?: string;
@@ -175,6 +188,16 @@ export interface DesignProject {
     role: string;
     name: string;
   }[];
-  url?: string;
   isDesign?: true;
+  url?: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: "task" | "project" | "finance" | "system";
+  timestamp: string;
+  read: boolean;
+  link?: string;
 }

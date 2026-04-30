@@ -7,15 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowDownRight, ArrowUpRight, Wallet, PiggyBank, Download, CreditCard, Tag, Search, HandCoins, Info } from "lucide-react";
+import { Plus, Trash2, ArrowDownRight, ArrowUpRight, Wallet, PiggyBank, Download, CreditCard, Tag, Search, HandCoins, Info, Coins } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { PaymentCard, AddCardTile } from "@/components/PaymentCard";
 import { FrostedTooltip } from "@/components/ChartTooltip";
-import { useTransactions, useCategories, usePaymentMethods, useLoans } from "@/store/useAppStore";
+import { useTransactions, useCategories, usePaymentMethods, useLoans, useSavings } from "@/store/useAppStore";
 import { format, isThisMonth, subMonths, startOfMonth } from "date-fns";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend, Sector } from "recharts";
-import type { TransactionType, CardBrand, Loan } from "@/types";
+import type { TransactionType, CardBrand, Loan, PaymentMethod } from "@/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -41,9 +41,11 @@ const renderActivePie = (props: any) => {
 export default function FinancePage() {
   const { transactions, addTransaction, removeTransaction } = useTransactions();
   const { categories, addCategory, removeCategory } = useCategories();
-  const { methods, addMethod, removeMethod } = usePaymentMethods();
-  const { loans, addLoan, removeLoan, repayLoan } = useLoans();
+  const { methods, addMethod, removeMethod, updateMethod } = usePaymentMethods();
+  const { loans, addLoan, removeLoan, repayLoan, updateLoan } = useLoans();
+  const { savings, addSaving, removeSaving, updateSaving } = useSavings();
   const loansList = loans || [];
+  const savingsList = savings || [];
 
   const transactionsList = transactions || [];
   const categoriesList = categories || [];
@@ -58,8 +60,14 @@ export default function FinancePage() {
   const [loanOpen, setLoanOpen] = useState(false);
   const [repayOpen, setRepayOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [selectedTx, setSelectedTx] = useState<any>(null);
   const [txOpen, setTxOpen] = useState(false);
+  const [savingsOpen, setSavingsOpen] = useState(false);
+  const [editMethodOpen, setEditMethodOpen] = useState(false);
+  const [editLoanOpen, setEditLoanOpen] = useState(false);
+  const [graphTimeframe, setGraphTimeframe] = useState<"today" | "week" | "month" | "year">("month");
+  const [currency, setCurrency] = useState("KES");
 
   const [open, setOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
@@ -75,12 +83,27 @@ export default function FinancePage() {
   });
   const [catDraft, setCatDraft] = useState({ name: "", type: "expense" as TransactionType, color: "#45B1E8" });
   const [methodDraft, setMethodDraft] = useState({
-    name: "", type: "card" as "cash" | "card" | "bank" | "wallet",
+    name: "", type: "card" as "cash" | "card" | "bank",
     color: "#0b1f3a", holder: "", expiry: "", brand: "visa" as CardBrand,
-    balance: "", cardNumber: "", cvc: ""
+    balance: "", cardNumber: "", cvc: "", currency: "KES", linkedAccountId: "",
+    denominations: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 } as Record<string, number>
   });
-  const [loanDraft, setLoanDraft] = useState({ lender: "", principal: "", totalRepayable: "", date: format(new Date(), "yyyy-MM-dd") });
+  const [loanDraft, setLoanDraft] = useState({ 
+    lender: "", principal: "", totalRepayable: "", 
+    date: format(new Date(), "yyyy-MM-dd"), 
+    interestRate: "", interestType: "flat" as "flat" | "reducing" 
+  });
+  const [savingsDraft, setSavingsDraft] = useState({ name: "", amount: "", methodId: "" });
+  const [cashWizardOpen, setCashWizardOpen] = useState(false);
+  const [cashWizard, setCashWizard] = useState({
+    amountPaid: "",
+    denomsGiven: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 } as Record<string, number>,
+    changeReceived: "",
+    denomsChange: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 } as Record<string, number>
+  });
+
   const [repayDraft, setRepayDraft] = useState({ amount: "", methodId: "", categoryId: "" });
+  const totalBalance = methodsList.reduce((acc, m) => acc + (m.balance || 0), 0);
 
   const timeframeData = useMemo(() => {
     const now = new Date();
@@ -140,17 +163,50 @@ export default function FinancePage() {
 
   const trendData = useMemo(() => {
     const buckets: Record<string, { month: string; income: number; expense: number }> = {};
-    for (let i = 5; i >= 0; i--) {
-      const d = subMonths(new Date(), i);
-      const k = format(d, "MMM");
-      buckets[k] = { month: k, income: 0, expense: 0 };
+    const now = new Date();
+
+    if (graphTimeframe === "today" || graphTimeframe === "week") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 86400000);
+        const k = format(d, "EEE"); // Mon, Tue
+        buckets[k] = { month: k, income: 0, expense: 0 };
+      }
+      transactionsList.forEach((t) => {
+        const d = new Date(t.date);
+        if (now.getTime() - d.getTime() < 7 * 86400000) {
+          const k = format(d, "EEE");
+          if (buckets[k]) buckets[k][t.type] += t.amount;
+        }
+      });
+    } else if (graphTimeframe === "month") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 86400000);
+        const k = format(d, "MMM d");
+        buckets[k] = { month: k, income: 0, expense: 0 };
+      }
+      transactionsList.forEach((t) => {
+        const d = new Date(t.date);
+        if (now.getTime() - d.getTime() < 30 * 86400000) {
+          const k = format(d, "MMM d");
+          if (buckets[k]) buckets[k][t.type] += t.amount;
+        }
+      });
+    } else {
+      for (let i = 11; i >= 0; i--) {
+        const d = subMonths(now, i);
+        const k = format(d, "MMM");
+        buckets[k] = { month: k, income: 0, expense: 0 };
+      }
+      transactionsList.forEach((t) => {
+        const d = new Date(t.date);
+        if (now.getTime() - d.getTime() < 365 * 86400000) {
+          const k = format(d, "MMM");
+          if (buckets[k]) buckets[k][t.type] += t.amount;
+        }
+      });
     }
-    transactionsList.forEach((t) => {
-      const k = format(new Date(t.date), "MMM");
-      if (buckets[k]) buckets[k][t.type] += t.amount;
-    });
     return Object.values(buckets);
-  }, [transactionsList]);
+  }, [transactionsList, graphTimeframe]);
 
   const filtered = useMemo(() => {
     return transactionsList.filter((t) => {
@@ -170,6 +226,19 @@ export default function FinancePage() {
     const amt = parseFloat(draft.amount);
     if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
     if (!draft.categoryId) { toast.error("Pick a category"); return; }
+
+    const method = methodsList.find(m => m.id === draft.methodId);
+    if (method && method.type === "cash" && draft.type === "expense") {
+       setCashWizard({ 
+         amountPaid: draft.amount,
+         denomsGiven: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 },
+         changeReceived: "",
+         denomsChange: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 }
+       });
+       setCashWizardOpen(true);
+       return;
+    }
+
     addTransaction({
       type: draft.type, amount: amt, categoryId: draft.categoryId,
       methodId: draft.methodId || undefined, description: draft.description,
@@ -189,7 +258,7 @@ export default function FinancePage() {
 
   const handleAddMethod = () => {
     if (!methodDraft.name.trim()) { toast.error("Name required"); return; }
-    addMethod({
+    const data = {
       name: methodDraft.name, type: methodDraft.type,
       color: methodDraft.color,
       holder: methodDraft.holder || undefined,
@@ -198,10 +267,25 @@ export default function FinancePage() {
       balance: parseFloat(methodDraft.balance) || 0,
       cardNumber: methodDraft.cardNumber,
       cvc: methodDraft.cvc,
+      currency: methodDraft.currency,
+      linkedAccountId: methodDraft.linkedAccountId === "none" ? undefined : methodDraft.linkedAccountId,
+      denominations: methodDraft.type === "cash" ? methodDraft.denominations : undefined
+    };
+
+    if (selectedMethod) {
+      updateMethod(selectedMethod.id, data);
+      toast.success("Payment method updated");
+    } else {
+      addMethod(data);
+      toast.success("Payment method added");
+    }
+    setMethodDraft({ 
+      name: "", type: "card", color: "#0b1f3a", holder: "", expiry: "", brand: "visa", 
+      balance: "", cardNumber: "", cvc: "", currency: "KES", linkedAccountId: "",
+      denominations: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 }
     });
-    toast.success("Payment method added");
-    setMethodDraft({ name: "", type: "card", color: "#0b1f3a", holder: "", expiry: "", brand: "visa", balance: "", cardNumber: "", cvc: "" });
     setMethodOpen(false);
+    setSelectedMethod(null);
   };
 
   const handleAddLoan = () => {
@@ -216,7 +300,7 @@ export default function FinancePage() {
     });
     toast.success("Loan added");
     setLoanOpen(false);
-    setLoanDraft({ lender: "", principal: "", totalRepayable: "", date: format(new Date(), "yyyy-MM-dd") });
+    setLoanDraft({ lender: "", principal: "", totalRepayable: "", date: format(new Date(), "yyyy-MM-dd"), interestRate: "", interestType: "flat" });
   };
 
   const handleRepay = () => {
@@ -366,32 +450,55 @@ export default function FinancePage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="Income" value={`$${timeframeData.income.toLocaleString()}`} icon={ArrowUpRight} accent="success" delta={{ value: `${Math.abs(timeframeData.incomeDelta).toFixed(0)}%`, positive: timeframeData.incomeDelta >= 0 }} />
-        <StatCard label="Expenses" value={`$${timeframeData.expense.toLocaleString()}`} icon={ArrowDownRight} accent="destructive" delta={{ value: `${Math.abs(timeframeData.expenseDelta).toFixed(0)}%`, positive: timeframeData.expenseDelta < 0 }} />
-        <StatCard label="Savings" value={`$${timeframeData.savings.toLocaleString()}`} icon={PiggyBank} accent={timeframeData.savings >= 0 ? "success" : "destructive"} />
-        <StatCard label="Methods" value={`${methodsList.length}`} icon={Wallet} accent="primary" />
+        <StatCard label="Total Amount" value={`${currency} ${totalBalance.toLocaleString()}`} icon={Wallet} accent="primary" />
+        <StatCard label="Income" value={`${currency} ${timeframeData.income.toLocaleString()}`} icon={ArrowUpRight} accent="success" delta={{ value: `${Math.abs(timeframeData.incomeDelta).toFixed(0)}%`, positive: timeframeData.incomeDelta >= 0 }} />
+        <StatCard label="Expenses" value={`${currency} ${timeframeData.expense.toLocaleString()}`} icon={ArrowDownRight} accent="destructive" delta={{ value: `${Math.abs(timeframeData.expenseDelta).toFixed(0)}%`, positive: timeframeData.expenseDelta < 0 }} />
+        <StatCard label="Savings" value={`${currency} ${timeframeData.savings.toLocaleString()}`} icon={PiggyBank} accent={timeframeData.savings >= 0 ? "success" : "destructive"} onClick={() => setSavingsOpen(true)} />
       </div>
 
       <Card className="animate-in-up">
-        <CardHeader className="flex-row items-end justify-between space-y-0 gap-3">
+        <CardHeader className="flex-row items-center justify-between space-y-0 gap-3">
           <div>
-            <CardTitle className="text-lg flex items-center gap-2"><CreditCard className="w-4 h-4" />My cards</CardTitle>
-            <CardDescription>Cards, accounts, and wallets</CardDescription>
+            <CardTitle className="text-lg flex items-center gap-2"><Wallet className="w-4 h-4" />My Wallet</CardTitle>
+            <CardDescription>Cards, accounts, cash, and digital wallets</CardDescription>
           </div>
+          <Button size="icon" variant="ghost" onClick={() => {
+            setMethodDraft({
+              name: "", type: "card", color: "#0b1f3a", holder: "", expiry: "", brand: "visa",
+              balance: "", cardNumber: "", cvc: "", currency: "KES", linkedAccountId: "",
+              denominations: { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 }
+            });
+            setSelectedMethod(null);
+            setMethodOpen(true);
+          }} className="h-8 w-8 rounded-full border border-border/50">
+            <Plus className="w-4 h-4" />
+          </Button>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 sm:-space-x-12 hover:sm:space-x-4 transition-all duration-500 ease-spring px-4 overflow-x-auto py-8">
+          <div className="flex flex-col sm:flex-row gap-4 sm:-space-x-12 hover:sm:space-x-4 transition-all duration-500 ease-spring px-4 overflow-x-auto py-8 scrollbar-hide">
             {methodsList.map((m, i) => (
               <div key={m.id} className="relative group/card w-full sm:w-[320px] shrink-0 transition-transform duration-500 hover:-translate-y-4 hover:z-50 focus-within:z-50" style={{ zIndex: i }}>
-                <PaymentCard method={m} onDelete={() => { removeMethod(m.id); toast.error("Method removed"); }} />
+                <PaymentCard 
+                  method={m} 
+                  onDelete={() => { removeMethod(m.id); toast.error("Method removed"); }} 
+                  onClick={() => {
+                    setSelectedMethod(m);
+                    setMethodDraft({
+                      name: m.name, type: m.type as any, color: m.color || "#0b1f3a",
+                      holder: m.holder || "", expiry: m.expiry || "", brand: m.brand || "visa",
+                      balance: m.balance.toString(), cardNumber: m.cardNumber || "", cvc: m.cvc || "",
+                      currency: m.currency || "KES", linkedAccountId: m.linkedAccountId || "",
+                      denominations: m.denominations || { "1000": 0, "500": 0, "200": 0, "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 }
+                    });
+                    setMethodOpen(true);
+                  }}
+                />
               </div>
             ))}
-            <Dialog open={methodOpen} onOpenChange={setMethodOpen}>
-              <DialogTrigger asChild>
-                <div className="w-full sm:w-[320px] shrink-0 relative z-0 mt-4 sm:mt-0 hover:z-50 transition-all duration-500 hover:-translate-y-4"><AddCardTile onClick={() => setMethodOpen(true)} /></div>
-              </DialogTrigger>
-              <DialogContent className="rounded-2xl max-w-lg">
-                <DialogHeader><DialogTitle>Add payment method</DialogTitle></DialogHeader>
+          </div>
+          <Dialog open={methodOpen} onOpenChange={setMethodOpen}>
+              <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>{selectedMethod ? "Update" : "Add"} payment method</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                   <div className="max-w-sm mx-auto">
                     <PaymentCard method={{
@@ -400,69 +507,147 @@ export default function FinancePage() {
                       cvc: methodDraft.cvc, balance: parseFloat(methodDraft.balance) || 0,
                       color: methodDraft.color, holder: methodDraft.holder || "CARDHOLDER",
                       expiry: methodDraft.expiry, brand: methodDraft.brand,
+                      currency: methodDraft.currency
                     }} />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Input className="col-span-2" placeholder="Display name" value={methodDraft.name} onChange={(e) => setMethodDraft({ ...methodDraft, name: e.target.value })} />
+                  <div className="grid grid-cols-12 gap-3">
+                    <Input className="col-span-6" placeholder="Display name" value={methodDraft.name} onChange={(e) => setMethodDraft({ ...methodDraft, name: e.target.value })} />
                     <Select value={methodDraft.type} onValueChange={(v: any) => setMethodDraft({ ...methodDraft, type: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="card">Card</SelectItem>
                         <SelectItem value="bank">Bank account</SelectItem>
-                        <SelectItem value="wallet">Wallet</SelectItem>
                         <SelectItem value="cash">Cash</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Select value={methodDraft.currency} onValueChange={(v: any) => setMethodDraft({ ...methodDraft, currency: v })}>
+                      <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="KES">KES</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Input type="number" placeholder="Starting Balance" value={methodDraft.balance} onChange={(e) => setMethodDraft({ ...methodDraft, balance: e.target.value })} />
-                  {methodDraft.type === "card" && (
+
+                  {methodDraft.type === "cash" ? (
+                    <div className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border/50">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Denominations</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {Object.keys(methodDraft.denominations).sort((a, b) => parseInt(b) - parseInt(a)).map(note => (
+                          <div key={note} className="flex flex-col gap-1">
+                            <label className="text-[10px] text-muted-foreground">{note}</label>
+                            <Input 
+                              type="number" 
+                              className="h-8 text-xs" 
+                              value={methodDraft.denominations[note]} 
+                              onChange={(e) => {
+                                const newDenoms = { ...methodDraft.denominations, [note]: parseInt(e.target.value) || 0 };
+                                const newBalance = Object.entries(newDenoms).reduce((acc, [k, v]) => acc + parseInt(k) * v, 0);
+                                setMethodDraft({ ...methodDraft, denominations: newDenoms, balance: newBalance.toString() });
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-2 border-t border-border/50 flex justify-between items-center">
+                        <span className="text-xs font-medium">Total Balance:</span>
+                        <span className="text-sm font-bold">{methodDraft.currency} {parseFloat(methodDraft.balance || "0").toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
                     <>
                       <div className="grid grid-cols-2 gap-3">
-                        <Input placeholder="Cardholder name" value={methodDraft.holder} onChange={(e) => setMethodDraft({ ...methodDraft, holder: e.target.value.toUpperCase() })} />
-                        <Select value={methodDraft.brand} onValueChange={(v: CardBrand) => setMethodDraft({ ...methodDraft, brand: v })}>
-                          <SelectTrigger><SelectValue placeholder="Brand" /></SelectTrigger>
+                        <Input type="number" placeholder="Starting Balance" value={methodDraft.balance} onChange={(e) => setMethodDraft({ ...methodDraft, balance: e.target.value })} />
+                        <Select value={methodDraft.linkedAccountId} onValueChange={(v) => setMethodDraft({ ...methodDraft, linkedAccountId: v })}>
+                          <SelectTrigger><SelectValue placeholder="Link to Account" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="visa">Visa</SelectItem>
-                            <SelectItem value="mastercard">Mastercard</SelectItem>
-                            <SelectItem value="amex">American Express</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
+                            {methodsList.filter(m => m.type === "bank").map(m => (
+                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="grid grid-cols-12 gap-3">
-                        <Input className="col-span-5" placeholder="Card Number" maxLength={16} value={methodDraft.cardNumber} onChange={(e) => setMethodDraft({ ...methodDraft, cardNumber: e.target.value.replace(/\D/g, "").slice(0, 16) })} />
-                        <Input className="col-span-3" placeholder="MM/YY" maxLength={5} value={methodDraft.expiry} onChange={(e) => {
-                          let v = e.target.value.replace(/\D/g, "");
-                          if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
-                          setMethodDraft({ ...methodDraft, expiry: v });
-                        }} />
-                        <Input className="col-span-2" placeholder="CVC" maxLength={4} value={methodDraft.cvc} onChange={(e) => setMethodDraft({ ...methodDraft, cvc: e.target.value.replace(/\D/g, "") })} />
-                        <Input className="col-span-2 p-1 h-10" type="color" value={methodDraft.color} onChange={(e) => setMethodDraft({ ...methodDraft, color: e.target.value })} />
-                      </div>
+                      {methodDraft.type === "card" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Input placeholder="Cardholder name" value={methodDraft.holder} onChange={(e) => setMethodDraft({ ...methodDraft, holder: e.target.value.toUpperCase() })} />
+                            <Select value={methodDraft.brand} onValueChange={(v: CardBrand) => setMethodDraft({ ...methodDraft, brand: v })}>
+                              <SelectTrigger><SelectValue placeholder="Brand" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="visa">Visa</SelectItem>
+                                <SelectItem value="mastercard">Mastercard</SelectItem>
+                                <SelectItem value="amex">American Express</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-12 gap-3">
+                            <Input className="col-span-5" placeholder="Card Number" maxLength={16} value={methodDraft.cardNumber} onChange={(e) => setMethodDraft({ ...methodDraft, cardNumber: e.target.value.replace(/\D/g, "").slice(0, 16) })} />
+                            <Input className="col-span-3" placeholder="MM/YY" maxLength={5} value={methodDraft.expiry} onChange={(e) => {
+                              let v = e.target.value.replace(/\D/g, "");
+                              if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
+                              setMethodDraft({ ...methodDraft, expiry: v });
+                            }} />
+                            <Input className="col-span-2" placeholder="CVC" maxLength={4} value={methodDraft.cvc} onChange={(e) => setMethodDraft({ ...methodDraft, cvc: e.target.value.replace(/\D/g, "") })} />
+                            <Input className="col-span-2 p-1 h-10" type="color" value={methodDraft.color} onChange={(e) => setMethodDraft({ ...methodDraft, color: e.target.value })} />
+                          </div>
+                        </>
+                      )}
+                      {methodDraft.type === "bank" && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input placeholder="Account holder" value={methodDraft.holder} onChange={(e) => setMethodDraft({ ...methodDraft, holder: e.target.value })} />
+                          <Input type="color" className="p-1 h-10" value={methodDraft.color} onChange={(e) => setMethodDraft({ ...methodDraft, color: e.target.value })} />
+                        </div>
+                      )}
                     </>
-                  )}
-                  {methodDraft.type !== "card" && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <Input placeholder="Account holder" value={methodDraft.holder} onChange={(e) => setMethodDraft({ ...methodDraft, holder: e.target.value })} />
-                      <Input type="color" className="p-1 h-10" value={methodDraft.color} onChange={(e) => setMethodDraft({ ...methodDraft, color: e.target.value })} />
-                    </div>
                   )}
                 </div>
                 <DialogFooter>
                   <Button variant="ghost" onClick={() => setMethodOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAddMethod}>Add method</Button>
+                  <Button onClick={() => {
+                    const data = {
+                      name: methodDraft.name, type: methodDraft.type,
+                      color: methodDraft.color, holder: methodDraft.holder,
+                      expiry: methodDraft.expiry, brand: methodDraft.brand,
+                      balance: parseFloat(methodDraft.balance) || 0,
+                      cardNumber: methodDraft.cardNumber, cvc: methodDraft.cvc,
+                      currency: methodDraft.currency, linkedAccountId: methodDraft.linkedAccountId === "none" ? undefined : methodDraft.linkedAccountId,
+                      denominations: methodDraft.type === "cash" ? methodDraft.denominations : undefined
+                    };
+                    if (selectedMethod) {
+                      updateMethod(selectedMethod.id, data);
+                      toast.success("Updated");
+                    } else {
+                      addMethod(data);
+                      toast.success("Added");
+                    }
+                    setMethodOpen(false);
+                  }}>{selectedMethod ? "Update" : "Add"}</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
         <Card className="lg:col-span-3 chart-3d animate-in-up">
-          <CardHeader>
-            <CardTitle className="text-lg">Income vs expenses</CardTitle>
-            <CardDescription>Last 6 months</CardDescription>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-lg">Income vs expenses</CardTitle>
+              <CardDescription>Scale: {graphTimeframe}</CardDescription>
+            </div>
+            <Select value={graphTimeframe} onValueChange={(v: any) => setGraphTimeframe(v)}>
+              <SelectTrigger className="w-[100px] h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">Week</SelectItem>
+                <SelectItem value="month">Month</SelectItem>
+                <SelectItem value="year">Year</SelectItem>
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent>
             <div className="h-[280px] -ml-2">
@@ -480,8 +665,8 @@ export default function FinancePage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip content={<FrostedTooltip formatter={(v) => `$${v.toLocaleString()}`} />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${currency}${v}`} />
+                  <Tooltip content={<FrostedTooltip formatter={(v) => `${currency} ${v.toLocaleString()}`} />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
                   <Legend wrapperStyle={{ fontSize: "12px" }} iconType="circle" />
                   <Bar dataKey="income" fill="url(#incBG)" radius={[8, 8, 0, 0]} animationDuration={1100} />
                   <Bar dataKey="expense" fill="url(#expBG)" radius={[8, 8, 0, 0]} animationDuration={1100} animationBegin={200} />
@@ -534,66 +719,121 @@ export default function FinancePage() {
           <Dialog open={loanOpen} onOpenChange={setLoanOpen}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4" />Add Loan</Button></DialogTrigger>
             <DialogContent className="rounded-2xl">
-              <DialogHeader><DialogTitle>Record New Loan</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{selectedLoan ? "Update" : "Record New"} Loan</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                 <Input placeholder="Lender (Person/Bank)" value={loanDraft.lender} onChange={(e) => setLoanDraft({ ...loanDraft, lender: e.target.value })} />
                 <div className="grid grid-cols-2 gap-3">
                   <Input type="number" placeholder="Principal Amount" value={loanDraft.principal} onChange={(e) => setLoanDraft({ ...loanDraft, principal: e.target.value })} />
                   <Input type="number" placeholder="Total Repayable" value={loanDraft.totalRepayable} onChange={(e) => setLoanDraft({ ...loanDraft, totalRepayable: e.target.value })} />
                 </div>
-                {loanDraft.principal && loanDraft.totalRepayable && (
-                  <p className="text-xs text-muted-foreground tabular-nums">Effective Interest Rate: {(((parseFloat(loanDraft.totalRepayable) - parseFloat(loanDraft.principal)) / parseFloat(loanDraft.principal)) * 100).toFixed(1)}%</p>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <Input type="number" placeholder="Interest Rate (%)" value={loanDraft.interestRate} onChange={(e) => setLoanDraft({ ...loanDraft, interestRate: e.target.value })} />
+                  <Select value={loanDraft.interestType} onValueChange={(v: any) => setLoanDraft({ ...loanDraft, interestType: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="flat">Flat Rate</SelectItem>
+                      <SelectItem value="reducing">Reducing Balance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Input type="date" value={loanDraft.date} onChange={(e) => setLoanDraft({ ...loanDraft, date: e.target.value })} />
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => setLoanOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddLoan}>Add Loan</Button>
+                <Button variant="ghost" onClick={() => { setLoanOpen(false); setSelectedLoan(null); }}>Cancel</Button>
+                <Button onClick={() => {
+                   const data = {
+                     lender: loanDraft.lender,
+                     principal: parseFloat(loanDraft.principal) || 0,
+                     totalRepayable: parseFloat(loanDraft.totalRepayable) || 0,
+                     interestRate: parseFloat(loanDraft.interestRate) || 0,
+                     interestType: loanDraft.interestType,
+                     date: loanDraft.date
+                   };
+                   if (selectedLoan) {
+                     updateLoan(selectedLoan.id, data);
+                     toast.success("Loan updated");
+                   } else {
+                     addLoan(data);
+                     toast.success("Loan added");
+                   }
+                   setLoanOpen(false);
+                   setSelectedLoan(null);
+                }}>{selectedLoan ? "Update" : "Add"} Loan</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </CardHeader>
         <CardContent>
-          {loansList.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No active loans.</p>
-          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {loansList.map(loan => (
-                <div key={loan.id} className="p-4 rounded-2xl border border-border/50 bg-muted/20 relative group">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h4 className="font-semibold">{loan.lender}</h4>
-                      <p className="text-xs text-muted-foreground">{format(new Date(loan.date), "MMM d, yyyy")}</p>
+              {loansList.map(loan => {
+                const daysSince = Math.max(0, Math.floor((new Date().getTime() - new Date(loan.date).getTime()) / 86400000));
+                const dailyRate = (loan.interestRate || 0) / 365 / 100;
+                const accruedInterest = loan.principal * dailyRate * daysSince;
+                const dueToday = Math.max(0, (loan.principal + accruedInterest) - loan.amountPaid);
+                
+                return (
+                  <div key={loan.id} className="p-4 rounded-2xl border border-border/50 bg-muted/20 relative group transition-all hover:bg-muted/30">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold">{loan.lender}</h4>
+                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{format(new Date(loan.date), "MMM d, yyyy")}</p>
+                      </div>
+                      <Badge variant={loan.status === "paid" ? "secondary" : "outline"} className={loan.status === "paid" ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}>
+                        {loan.status}
+                      </Badge>
                     </div>
-                    <Badge variant={loan.status === "paid" ? "secondary" : "outline"} className={loan.status === "paid" ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}>
-                      {loan.status}
-                    </Badge>
-                  </div>
-                  <div className="mt-4 space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Paid: ${loan.amountPaid.toLocaleString()}</span>
-                      <span className="font-medium">${loan.totalRepayable.toLocaleString()}</span>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Repayment Progress</span>
+                        <span className="font-bold">{Math.min((loan.amountPaid / loan.totalRepayable) * 100, 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-border/50 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary transition-all duration-1000 ease-spring" style={{ width: `${Math.min((loan.amountPaid / loan.totalRepayable) * 100, 100)}%` }} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                         <div className="space-y-0.5">
+                            <p className="text-[9px] text-muted-foreground uppercase">Paid</p>
+                            <p className="text-xs font-bold">{currency} {loan.amountPaid.toLocaleString()}</p>
+                         </div>
+                         <div className="space-y-0.5 text-right">
+                            <p className="text-[9px] text-muted-foreground uppercase">Target</p>
+                            <p className="text-xs font-bold">{currency} {loan.totalRepayable.toLocaleString()}</p>
+                         </div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-primary/5 border border-primary/10">
+                         <p className="text-[9px] text-primary font-bold uppercase tracking-widest">Amount Due Today</p>
+                         <p className="text-lg font-display font-bold text-primary">{currency} {dueToday.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                         <p className="text-[8px] text-muted-foreground">Includes {loan.interestRate}% {loan.interestType} interest</p>
+                      </div>
                     </div>
-                    <div className="h-2 w-full bg-border/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-primary" style={{ width: `${Math.min((loan.amountPaid / loan.totalRepayable) * 100, 100)}%` }} />
+                    <div className="mt-4 flex gap-2">
+                      {loan.status === "active" && (
+                        <Button size="sm" className="w-full text-xs h-8" onClick={() => { setSelectedLoan(loan); setRepayOpen(true); }}>Repay</Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => {
+                         setSelectedLoan(loan);
+                         setLoanDraft({
+                            lender: loan.lender,
+                            principal: loan.principal.toString(),
+                            totalRepayable: loan.totalRepayable.toString(),
+                            interestRate: (loan.interestRate || 0).toString(),
+                            interestType: loan.interestType || "flat",
+                            date: loan.date
+                         });
+                         setLoanOpen(true);
+                      }}><Info className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeLoan(loan.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1">Principal: ${loan.principal.toLocaleString()}</p>
                   </div>
-                  <div className="mt-4 flex gap-2">
-                    {loan.status === "active" && (
-                      <Button size="sm" className="w-full text-xs" onClick={() => { setSelectedLoan(loan); setRepayOpen(true); }}>Repay</Button>
-                    )}
-                    <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => removeLoan(loan.id)}><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          )}
+
         </CardContent>
       </Card>
       <Dialog open={repayOpen} onOpenChange={setRepayOpen}>
         <DialogContent className="rounded-2xl">
-          <DialogHeader><DialogTitle>Repay Loan: {selectedLoan?.lender}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Repay Loan: {selectedLoan?.lender || "Loan"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground mb-4">Remaining: ${(selectedLoan ? selectedLoan.totalRepayable - selectedLoan.amountPaid : 0).toLocaleString()}</p>
             <Input type="number" placeholder="Repayment Amount" value={repayDraft.amount} onChange={(e) => setRepayDraft({ ...repayDraft, amount: e.target.value })} autoFocus />
@@ -619,7 +859,55 @@ export default function FinancePage() {
         </DialogContent>
       </Dialog>
 
-      <Card>
+      <Dialog open={savingsOpen} onOpenChange={setSavingsOpen}>
+        <DialogContent className="rounded-2xl max-w-lg">
+          <DialogHeader><DialogTitle>Savings Sources</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+             <div className="flex gap-2">
+                <Input placeholder="Source Name" className="flex-1" value={savingsDraft.name} onChange={(e) => setSavingsDraft({ ...savingsDraft, name: e.target.value })} />
+                <Input type="number" placeholder="Amount" className="w-24" value={savingsDraft.amount} onChange={(e) => setSavingsDraft({ ...savingsDraft, amount: e.target.value })} />
+                <Select value={savingsDraft.methodId} onValueChange={(v) => setSavingsDraft({ ...savingsDraft, methodId: v })}>
+                  <SelectTrigger className="w-28"><SelectValue placeholder="Stored in..." /></SelectTrigger>
+                  <SelectContent>
+                    {methodsList.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="icon" onClick={() => {
+                  if (savingsDraft.name && savingsDraft.amount) {
+                    addSaving({
+                      name: savingsDraft.name,
+                      amount: parseFloat(savingsDraft.amount) || 0,
+                      methodId: savingsDraft.methodId
+                    });
+                    setSavingsDraft({ name: "", amount: "", methodId: "" });
+                    toast.success("Added source");
+                  }
+                }}><Plus className="w-4 h-4" /></Button>
+             </div>
+
+             <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto">
+                {savingsList.map(s => (
+                  <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50">
+                    <div>
+                      <p className="font-semibold text-sm">{s.name}</p>
+                      <p className="text-[10px] text-muted-foreground">Stored in {methodsList.find(m => m.id === s.methodId)?.name || "Unknown"}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="font-bold text-sm">{currency} {s.amount.toLocaleString()}</p>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeSaving(s.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSavingsOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Card className="animate-in-up">
         <CardHeader className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 space-y-0">
           <div>
             <CardTitle className="text-lg">Transactions</CardTitle>
@@ -674,7 +962,7 @@ export default function FinancePage() {
                     </div>
                   </div>
                   <p className={cn("font-semibold text-sm tabular-nums", t.type === "income" ? "text-success" : "text-destructive")}>
-                    {t.type === "income" ? "+" : "−"}${t.amount.toLocaleString()}
+                    {t.type === "income" ? "+" : "−"}{currency} {t.amount.toLocaleString()}
                   </p>
                   <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 h-8 w-8" onClick={(e) => { e.stopPropagation(); removeTransaction(t.id); toast.error("Deleted"); }} aria-label="Delete">
                     <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
@@ -694,7 +982,7 @@ export default function FinancePage() {
               <div className="text-center">
                 <p className="text-sm text-muted-foreground uppercase tracking-widest">{format(new Date(selectedTx.date), "EEEE, MMM d, yyyy")}</p>
                 <p className={cn("text-4xl font-display font-bold mt-2", selectedTx.type === "income" ? "text-success" : "text-destructive")}>
-                  {selectedTx.type === "income" ? "+" : "−"}${selectedTx.amount.toLocaleString()}
+                  {selectedTx.type === "income" ? "+" : "−"}{currency} {selectedTx.amount.toLocaleString()}
                 </p>
                 <p className="text-lg font-medium mt-1">{selectedTx.description || categoriesList.find(c => c.id === selectedTx.categoryId)?.name || "Transaction"}</p>
               </div>
@@ -717,6 +1005,87 @@ export default function FinancePage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cashWizardOpen} onOpenChange={setCashWizardOpen}>
+        <DialogContent className="rounded-3xl max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 font-black text-xl font-display"><Coins className="w-6 h-6 text-warning"/> Cash Payment Wizard</DialogTitle></DialogHeader>
+          <div className="space-y-6 py-4">
+             <div className="space-y-4">
+                <div className="flex justify-between items-end border-b border-border/50 pb-2">
+                   <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Product Price</p>
+                   <p className="text-2xl font-display font-black text-primary">{currency} {parseFloat(draft.amount || "0").toLocaleString()}</p>
+                </div>
+                
+                <div className="space-y-3 bg-muted/40 p-4 rounded-2xl border border-border/50">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cash Given Out (Denominations)</p>
+                   <div className="grid grid-cols-3 gap-2">
+                      {Object.keys(cashWizard.denomsGiven).sort((a,b)=>parseInt(b)-parseInt(a)).map(d => (
+                         <div key={d} className="space-y-1">
+                            <span className="text-[8px] font-bold text-muted-foreground ml-0.5">{d}</span>
+                            <Input type="number" className="h-8 text-[10px] rounded-lg" value={cashWizard.denomsGiven[d]} 
+                              onChange={(e) => {
+                                 const val = parseInt(e.target.value) || 0;
+                                 const next = { ...cashWizard.denomsGiven, [d]: val };
+                                 const total = Object.entries(next).reduce((acc, [k,v])=> acc + parseInt(k)*v, 0);
+                                 setCashWizard({ ...cashWizard, denomsGiven: next, amountPaid: total.toString() });
+                              }}
+                            />
+                         </div>
+                      ))}
+                   </div>
+                   <div className="flex justify-between items-center pt-2 border-t border-border/20">
+                      <p className="text-[10px] font-bold text-muted-foreground">Total Given</p>
+                      <p className="text-sm font-black font-display text-primary">{currency} {parseFloat(cashWizard.amountPaid || "0").toLocaleString()}</p>
+                   </div>
+                </div>
+
+                <div className="space-y-3 bg-success/5 p-4 rounded-2xl border border-success/10">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-success">Change Received</p>
+                   <div className="grid grid-cols-3 gap-2">
+                      {Object.keys(cashWizard.denomsChange).sort((a,b)=>parseInt(b)-parseInt(a)).map(d => (
+                         <div key={d} className="space-y-1">
+                            <span className="text-[8px] font-bold text-success/70 ml-0.5">{d}</span>
+                            <Input type="number" className="h-8 text-[10px] rounded-lg border-success/20 bg-success/10" value={cashWizard.denomsChange[d]} 
+                              onChange={(e) => {
+                                 const val = parseInt(e.target.value) || 0;
+                                 const next = { ...cashWizard.denomsChange, [d]: val };
+                                 const total = Object.entries(next).reduce((acc, [k,v])=> acc + parseInt(k)*v, 0);
+                                 setCashWizard({ ...cashWizard, denomsChange: next, changeReceived: total.toString() });
+                              }}
+                            />
+                         </div>
+                      ))}
+                   </div>
+                   <div className="flex justify-between items-center pt-2 border-t border-success/20">
+                      <p className="text-[10px] font-bold text-success/70">Calculated Change</p>
+                      <p className="text-sm font-black font-display text-success">{currency} {parseFloat(cashWizard.changeReceived || "0").toLocaleString()}</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <DialogFooter>
+             <Button variant="ghost" onClick={()=>setCashWizardOpen(false)} className="rounded-xl">Cancel</Button>
+             <Button onClick={() => {
+                const price = parseFloat(draft.amount);
+                addTransaction({ ...draft, amount: price });
+                
+                const cashMethod = methodsList.find(m => m.id === draft.methodId);
+                if (cashMethod && cashMethod.denominations) {
+                   const newDenoms = { ...cashMethod.denominations };
+                   Object.entries(cashWizard.denomsGiven).forEach(([k,v]) => { if (newDenoms[k] !== undefined) newDenoms[k] -= v; });
+                   Object.entries(cashWizard.denomsChange).forEach(([k,v]) => { if (newDenoms[k] !== undefined) newDenoms[k] += v; });
+                   updateMethod(cashMethod.id, { denominations: newDenoms });
+                }
+
+                setDraft({ ...draft, amount: "", description: "" });
+                setCashWizardOpen(false);
+                setOpen(false);
+                toast.success("Cash payment logged");
+             }} className="rounded-xl font-bold bg-primary shadow-lg shadow-primary/20">Complete Payment</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

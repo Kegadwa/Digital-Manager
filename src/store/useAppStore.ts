@@ -9,7 +9,8 @@ import {
   collection
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Task, Transaction, Note, FileItem, Project, Category, PaymentMethod, ProjectActivity, PortfolioProject, Experience, Education, Certification, Tool, DesignProject, Loan } from "@/types";
+import type { Task, Transaction, Note, FileItem, Project, Category, PaymentMethod, ProjectActivity, PortfolioProject, Experience, Education, Certification, Tool, DesignProject, Loan, SavingsSource, Notification } from "@/types";
+import { useMemo } from "react";
 
 export const KEYS = {
   tasks: "dh_tasks",
@@ -20,6 +21,7 @@ export const KEYS = {
   categories: "dh_categories",
   methods: "dh_methods",
   loans: "dh_loans",
+  savings: "dh_savings",
   seeded: "dh_seeded",
   // Portfolio keys
   portfolioAbout: "p_about",
@@ -31,6 +33,7 @@ export const KEYS = {
   portfolioSocial: "p_social",
   portfolioTools: "p_tools",
   portfolioDesignProjects: "p_design_projects",
+  notifications: "dh_notifications",
 };
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -47,9 +50,9 @@ const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 const DEFAULT_METHODS: PaymentMethod[] = [
-  { id: "1", name: "Main Bank", type: "bank", color: "#0B1F3A", holder: "KEITH K.", cardNumber: "4421", balance: 5000 },
-  { id: "2", name: "Visa Gold", type: "card", color: "#1A1A1A", holder: "KEITH K.", cardNumber: "4111222233338892", brand: "visa", expiry: "12/28", cvc: "123", balance: 1200 },
-  { id: "3", name: "M-Pesa", type: "wallet", color: "#2ECC71", holder: "KEITH K.", balance: 350 },
+  { id: "1", name: "Main Bank", type: "bank", color: "#0B1F3A", holder: "KEITH K.", balance: 5000, currency: "KES" },
+  { id: "2", name: "Visa Gold", type: "card", color: "#1A1A1A", holder: "KEITH K.", cardNumber: "4111222233338892", brand: "visa", expiry: "12/28", cvc: "123", balance: 1200, currency: "KES" },
+  { id: "3", name: "Cash", type: "cash", color: "#2ECC71", holder: "KEITH K.", balance: 350, currency: "KES", denominations: { "1000": 0, "500": 0, "200": 1, "100": 1, "50": 1, "20": 0, "10": 0, "5": 0, "1": 0 } },
 ];
 
 function seedData() {
@@ -74,6 +77,10 @@ function seedData() {
     [KEYS.categories]: DEFAULT_CATEGORIES,
     [KEYS.methods]: DEFAULT_METHODS,
     [KEYS.loans]: [],
+    [KEYS.savings]: [],
+    [KEYS.notifications]: [
+      { id: uid(), title: "Welcome to Digital Manager", message: "Your workspace is ready. Start by adding some tasks or notes.", type: "system", timestamp: now, read: false }
+    ],
   };
 }
 
@@ -230,9 +237,17 @@ export function useCategories() {
   return { categories, addCategory, removeCategory };
 }
 
+export function useSavings() {
+  const [savings, setSavings] = usePersistedList<SavingsSource>(KEYS.savings);
+  const addSaving = (s: Partial<SavingsSource>) => setSavings([{ ...s, id: uid(), date: new Date().toISOString() } as SavingsSource, ...savings]);
+  const removeSaving = (id: string) => setSavings(savings.filter(s => s.id !== id));
+  const updateSaving = (id: string, updates: Partial<SavingsSource>) => setSavings(savings.map(s => s.id === id ? { ...s, ...updates } : s));
+  return { savings, addSaving, removeSaving, updateSaving };
+}
+
 export function usePaymentMethods() {
   const [methods, setMethods] = usePersistedList<PaymentMethod>(KEYS.methods);
-  const addMethod = (m: Partial<PaymentMethod>) => setMethods([{ ...m, id: uid(), balance: m.balance || 0 } as PaymentMethod, ...methods]);
+  const addMethod = (m: Partial<PaymentMethod>) => setMethods([{ ...m, id: uid(), balance: m.balance || 0, currency: m.currency || "KES" } as PaymentMethod, ...methods]);
   const removeMethod = (id: string) => setMethods(methods.filter(m => m.id !== id));
   const updateMethod = (id: string, updates: Partial<PaymentMethod>) => setMethods(methods.map(m => m.id === id ? { ...m, ...updates } : m));
   return { methods, addMethod, removeMethod, updateMethod };
@@ -242,7 +257,7 @@ export function useLoans() {
   const [loans, setLoans] = usePersistedList<Loan>(KEYS.loans);
   const { addTransaction } = useTransactions();
 
-  const addLoan = (l: Partial<Loan>) => setLoans([{ ...l, id: uid(), amountPaid: 0, status: "active" } as Loan, ...loans]);
+  const addLoan = (l: Partial<Loan>) => setLoans([{ ...l, id: uid(), amountPaid: 0, status: "active", interestRate: l.interestRate || 0, interestType: l.interestType || "flat" } as Loan, ...loans]);
   const removeLoan = (id: string) => setLoans(loans.filter(l => l.id !== id));
   const updateLoan = (id: string, updates: Partial<Loan>) => setLoans(loans.map(l => l.id === id ? { ...l, ...updates } : l));
   
@@ -297,3 +312,56 @@ export function usePortfolio() {
     tools, setTools, addTool: (t: Partial<Tool>) => addItem(tools, setTools, t), removeTool: (id: string) => removeItem(tools, setTools, id), updateTool: (id: string, u: Partial<Tool>) => updateItem(tools, setTools, id, u),
   };
 }
+
+export function useWorkspaceProjects() {
+  const { projects } = useProjects();
+  const { projects: portfolioProjects, designProjects } = usePortfolio();
+
+  const unified = useMemo(() => {
+    const ws = (projects || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      color: p.color,
+      status: p.status,
+      createdAt: p.createdAt,
+      type: "workspace" as const,
+      link: `/projects?id=${p.id}`
+    }));
+
+    const port = (portfolioProjects || []).map(p => ({
+      id: p.id,
+      name: p.title,
+      description: p.summary,
+      color: "#4F46E5",
+      status: "completed" as const,
+      createdAt: p.year ? `${p.year}-01-01T00:00:00Z` : new Date().toISOString(),
+      type: "portfolio" as const,
+      link: `/portfolio/projects`
+    }));
+
+    const design = (designProjects || []).map(p => ({
+      id: p.id,
+      name: p.title,
+      description: p.summary,
+      color: "#EC4899",
+      status: "completed" as const,
+      createdAt: p.year ? `${p.year}-01-01T00:00:00Z` : new Date().toISOString(),
+      type: "design" as const,
+      link: `/portfolio/design`
+    }));
+
+    return [...ws, ...port, ...design].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  }, [projects, portfolioProjects, designProjects]);
+
+  return { unifiedProjects: unified };
+}
+
+export function useNotifications() {
+  const [notifications, setNotifications] = usePersistedList<Notification>(KEYS.notifications);
+  const addNotification = (n: Partial<Notification>) => setNotifications([{ ...n, id: uid(), timestamp: new Date().toISOString(), read: false } as Notification, ...notifications]);
+  const markAsRead = (id: string) => setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  const clearAll = () => setNotifications([]);
+  return { notifications, addNotification, markAsRead, clearAll };
+}
+

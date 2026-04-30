@@ -4,7 +4,8 @@ import type { PaymentMethod, CardBrand } from "@/types";
 
 interface PaymentCardProps {
   method: PaymentMethod;
-  onDelete?: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  onClick?: () => void;
   className?: string;
 }
 
@@ -42,23 +43,25 @@ const Chip = () => (
   </svg>
 );
 
-export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
+export function PaymentCard({ method, onDelete, onClick, className }: PaymentCardProps) {
   const baseColor = method.color || "#1a1a1a";
   const isCard = method.type === "card";
   const isBank = method.type === "bank";
-  const isWallet = method.type === "wallet";
   const isCash = method.type === "cash";
+  const currency = method.currency || "KES";
 
-  const TypeIcon = isCash ? Banknote : isWallet ? Wallet : isBank ? Building2 : null;
+  const TypeIcon = isCash ? Banknote : isBank ? Building2 : null;
   const cardNumber = method.cardNumber || "••••••••••••••••";
   const formattedNumber = cardNumber.match(/.{1,4}/g)?.join(' ') || cardNumber;
-  const balance = method.balance !== undefined ? `$${method.balance.toLocaleString()}` : "$0";
+  const balance = `${currency} ${method.balance?.toLocaleString() || "0"}`;
 
   return (
     <div
+      onClick={onClick}
       className={cn(
         "group relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden",
-        "text-white select-none cursor-default",
+        "text-white select-none",
+        onClick ? "cursor-pointer" : "cursor-default",
         "transition-transform duration-500 ease-spring",
         "[transform-style:preserve-3d] hover:[transform:perspective(1200px)_rotateY(-6deg)_rotateX(4deg)_translateZ(0)]",
         "shadow-ios hover:shadow-float",
@@ -91,7 +94,7 @@ export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
           </div>
           {onDelete && (
             <button
-              onClick={onDelete}
+              onClick={(e) => { e.stopPropagation(); onDelete(e); }}
               aria-label="Remove method"
               className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md bg-white/10 hover:bg-white/25 backdrop-blur"
             >
@@ -101,7 +104,15 @@ export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
         </div>
 
         {/* Middle: number or name */}
-        {isCard ? (
+        {isCash ? (
+          <div className="flex-1 flex flex-col justify-center items-center text-center space-y-2">
+            <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
+               <Banknote className="w-8 h-8 text-white" />
+            </div>
+            <p className="text-3xl font-display font-bold tracking-tight">{balance}</p>
+            <p className="text-[10px] uppercase tracking-widest opacity-70 font-medium">Liquid Cash ({currency})</p>
+          </div>
+        ) : isCard ? (
           <div>
             <p className="font-mono text-base sm:text-lg tracking-[0.18em] tabular-nums drop-shadow-sm">{formattedNumber}</p>
             <div className="flex gap-4 mt-1.5 font-mono text-xs opacity-80 tracking-widest">
@@ -110,16 +121,6 @@ export function PaymentCard({ method, onDelete, className }: PaymentCardProps) {
             </div>
           </div>
         ) : isBank ? (
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
-            <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>
-          </div>
-        ) : isWallet ? (
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
-            <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>
-          </div>
-        ) : isCash ? (
           <div className="space-y-1">
             <p className="text-[10px] uppercase tracking-widest opacity-70">Balance</p>
             <p className="font-display text-2xl font-bold tabular-nums">{balance}</p>

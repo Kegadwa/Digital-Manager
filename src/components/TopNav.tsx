@@ -1,6 +1,9 @@
-import { Bell, Search, User, LogOut, Settings as SettingsIcon, Command } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { CommandMenu } from "./CommandMenu";
+import { useNotifications } from "@/store/useAppStore";
+import { formatDistanceToNow } from "date-fns";
+import { CheckSquare, Activity, DollarSign, Info, Bell, Search, User, LogOut, Settings as SettingsIcon, Command } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -11,41 +14,66 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 
 export function TopNav() {
-  const notifCount = 3;
+  const { notifications, markAsRead, clearAll } = useNotifications();
+  const unreadCount = notifications.filter(n => !n.read).length;
   return (
     <header className="h-16 border-b border-border/60 bg-card/60 backdrop-blur-2xl flex items-center px-3 sm:px-4 lg:px-6 gap-2 sm:gap-4 sticky top-0 z-30">
       <SidebarTrigger className="shrink-0 transition-transform duration-300 active:scale-90" />
 
-      <div className="flex-1 max-w-xl relative hidden sm:block">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
-        <Input
-          placeholder="Search across your workspace…"
-          className="pl-10 pr-16 h-9 rounded-full bg-muted/50 border-transparent focus-visible:bg-background focus-visible:border-border transition-all"
-        />
-        <kbd className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground bg-background border border-border/60 rounded-md px-1.5 py-0.5">
-          <Command className="w-2.5 h-2.5" />K
-        </kbd>
-      </div>
+        <CommandMenu />
 
       <div className="flex-1" />
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-        <Button variant="ghost" size="icon" className="sm:hidden transition-transform active:scale-90" aria-label="Search">
-          <Search className="w-5 h-5" />
-        </Button>
-
-        <Button variant="ghost" size="icon" className="relative transition-transform active:scale-90" aria-label="Notifications">
-          <Bell className="w-5 h-5" />
-          {notifCount > 0 && (
-            <span className="absolute top-2 right-2 w-2 h-2">
-              <span className="ping-dot relative block w-2 h-2 rounded-full bg-primary" />
-            </span>
-          )}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative transition-transform active:scale-90" aria-label="Notifications">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2">
+                  <span className="ping-dot relative block w-2 h-2 rounded-full bg-primary" />
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-80 rounded-xl border-border/60 backdrop-blur-2xl bg-popover/90 p-0 overflow-hidden" align="end">
+            <div className="p-4 border-b border-border/60 flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Notifications</h3>
+              {unreadCount > 0 && <Button variant="ghost" className="h-auto p-0 text-[10px] text-primary" onClick={clearAll}>Clear all</Button>}
+            </div>
+            <div className="max-h-[350px] overflow-y-auto">
+              {notifications.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground">
+                  <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                  <p className="text-xs">No new notifications</p>
+                </div>
+              )}
+              {notifications.map((n) => {
+                const Icon = n.type === "task" ? CheckSquare : n.type === "project" ? Activity : n.type === "finance" ? DollarSign : Info;
+                return (
+                  <DropdownMenuItem 
+                    key={n.id} 
+                    className="p-4 cursor-pointer focus:bg-muted/50 border-b border-border/40 last:border-0 flex gap-3 items-start"
+                    onClick={() => markAsRead(n.id)}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-none mb-1">{n.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                      <p className="text-[10px] text-muted-foreground mt-2">{formatDistanceToNow(new Date(n.timestamp))} ago</p>
+                    </div>
+                    {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <ThemeToggle />
 
