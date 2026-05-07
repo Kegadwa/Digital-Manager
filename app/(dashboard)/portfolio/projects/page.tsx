@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Folder, Globe, Trash2, Image as ImageIcon, ExternalLink, Code2, PlusCircle, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,6 +14,7 @@ import { usePortfolio } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import Image from "next/image";
+import { FileUploader } from "@/components/FileUploader";
 import type { PortfolioProject, PortfolioProjectMetric } from "@/types";
 
 export default function PortfolioProjectsPage() {
@@ -37,6 +38,7 @@ export default function PortfolioProjectsPage() {
     stack: [],
     metrics: [],
     layout: "standard",
+    images: [],
   });
 
   const [newTag, setNewTag] = useState("");
@@ -66,6 +68,7 @@ export default function PortfolioProjectsPage() {
         stack: [],
         metrics: [],
         layout: "standard",
+        images: [],
       });
     } finally {
       setIsCreating(false);
@@ -100,10 +103,13 @@ export default function PortfolioProjectsPage() {
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4" />Add Project</Button></DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Add Portfolio Project</DialogTitle></DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                <div className="space-y-3">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add Portfolio Project</DialogTitle>
+                <DialogDescription className="sr-only">Enter the details for your new portfolio project.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase text-muted-foreground">Title</label>
                     <Input placeholder="Project Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
@@ -112,7 +118,7 @@ export default function PortfolioProjectsPage() {
                     <label className="text-xs font-bold uppercase text-muted-foreground">Short Label</label>
                     <Input placeholder="e.g. Featured Build" value={draft.shortLabel} onChange={(e) => setDraft({ ...draft, shortLabel: e.target.value })} />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase text-muted-foreground">Year</label>
                       <Input placeholder="2025" value={draft.year} onChange={(e) => setDraft({ ...draft, year: e.target.value })} />
@@ -126,30 +132,22 @@ export default function PortfolioProjectsPage() {
                     <label className="text-xs font-bold uppercase text-muted-foreground">URL</label>
                     <Input placeholder="https://..." value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Image URL</label>
-                    <Input placeholder="https://images.unsplash.com/..." value={draft.image} onChange={(e) => setDraft({ ...draft, image: e.target.value })} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Layout</label>
-                    <Select value={draft.layout} onValueChange={(v: "feature" | "standard") => setDraft({ ...draft, layout: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="feature">Feature (Large)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <FileUploader 
+                    label="Project Image (Main)"
+                    currentImage={draft.image}
+                    onUploadComplete={(url) => setDraft({ ...draft, image: url })}
+                    path="portfolio/codingprojects"
+                  />
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase text-muted-foreground">Summary</label>
                     <Textarea placeholder="Short hook..." value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} rows={2} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase text-muted-foreground">Overview</label>
-                    <Textarea placeholder="Detailed overview..." value={draft.overview} onChange={(e) => setDraft({ ...draft, overview: e.target.value })} rows={3} />
+                    <Textarea placeholder="Detailed overview..." value={draft.overview} onChange={(e) => setDraft({ ...draft, overview: e.target.value })} rows={2} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase text-muted-foreground">Challenge</label>
@@ -165,39 +163,65 @@ export default function PortfolioProjectsPage() {
                   </div>
                 </div>
 
-                <div className="col-span-1 md:col-span-2 border-t pt-4 space-y-4">
+                <div className="col-span-1 md:col-span-2 border-t pt-4 space-y-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Tech Stack</label>
-                    <div className="flex gap-2">
-                      <Input placeholder="Next.js" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStackItem()} />
-                      <Button type="button" variant="outline" onClick={addStackItem}><PlusCircle className="w-4 h-4" /></Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {draft.stack?.map(tag => (
-                        <Badge key={tag} variant="secondary" className="gap-1">
-                          {tag}
-                          <button onClick={() => removeStackItem(tag)} className="hover:text-destructive"><X className="w-3 h-3" /></button>
-                        </Badge>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Gallery Images</label>
+                    <FileUploader 
+                      label="Add Screenshots"
+                      onUploadComplete={(url) => setDraft({ ...draft, images: [...(draft.images || []), url] })}
+                      path="portfolio/codingprojects/gallery"
+                      accept="image/*"
+                    />
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                      {draft.images?.map((img, i) => (
+                        <div key={i} className="aspect-square relative rounded-lg overflow-hidden border group">
+                          <Image src={img} alt="Gallery" fill sizes="100px" className="object-cover" />
+                          <button 
+                            type="button"
+                            onClick={() => setDraft({ ...draft, images: draft.images?.filter((_, idx) => idx !== i) })}
+                            className="absolute top-1 right-1 p-1 bg-destructive text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Metrics</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="Label (e.g. Speed)" value={newMetric.label} onChange={(e) => setNewMetric({ ...newMetric, label: e.target.value })} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Tech Stack</label>
                       <div className="flex gap-2">
-                        <Input placeholder="Value (e.g. 100%)" value={newMetric.value} onChange={(e) => setNewMetric({ ...newMetric, value: e.target.value })} />
-                        <Button type="button" variant="outline" onClick={addMetricItem}><PlusCircle className="w-4 h-4" /></Button>
+                        <Input placeholder="Next.js" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStackItem()} />
+                        <Button type="button" variant="outline" onClick={addStackItem}><PlusCircle className="w-4 h-4" /></Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {draft.stack?.map(tag => (
+                          <Badge key={tag} variant="secondary" className="gap-1">
+                            {tag}
+                            <button type="button" onClick={() => removeStackItem(tag)} className="hover:text-destructive"><X className="w-3 h-3" /></button>
+                          </Badge>
+                        ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {draft.metrics?.map((m, i) => (
-                        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted text-xs">
-                          <span><strong>{m.value}</strong> {m.label}</span>
-                          <button onClick={() => removeMetricItem(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Metrics</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input placeholder="Label (e.g. Speed)" value={newMetric.label} onChange={(e) => setNewMetric({ ...newMetric, label: e.target.value })} />
+                        <div className="flex gap-2">
+                          <Input placeholder="Value (e.g. 100%)" value={newMetric.value} onChange={(e) => setNewMetric({ ...newMetric, value: e.target.value })} />
+                          <Button type="button" variant="outline" onClick={addMetricItem}><PlusCircle className="w-4 h-4" /></Button>
                         </div>
-                      ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        {draft.metrics?.map((m, i) => (
+                          <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted text-xs">
+                            <span><strong>{m.value}</strong> {m.label}</span>
+                            <button type="button" onClick={() => removeMetricItem(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -229,7 +253,7 @@ export default function PortfolioProjectsPage() {
               >
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                   {p.image ? (
-                    <Image src={p.image} alt={p.title} fill className="object-cover" />
+                    <Image src={p.image} alt={p.title} fill sizes="48px" className="object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-5 h-5" /></div>
                   )}
@@ -250,7 +274,7 @@ export default function PortfolioProjectsPage() {
             <Card className="shadow-ios border-border/40 overflow-hidden">
               <div className="relative h-48 w-full bg-muted">
                 {selected.image ? (
-                  <Image src={selected.image} alt={selected.title} fill className="object-cover" />
+                  <Image src={selected.image} alt={selected.title} fill sizes="(max-width: 768px) 100vw, 800px" priority className="object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-10 h-10" /></div>
                 )}
@@ -304,16 +328,34 @@ export default function PortfolioProjectsPage() {
                   </div>
                 </div>
 
+                {selected.images && selected.images.length > 0 && (
+                  <div className="pt-6 border-t border-border/40">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4" /> Project Screenshots
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {selected.images.map((img, i) => (
+                        <div key={i} className="aspect-video relative rounded-xl overflow-hidden bg-muted group/img border border-border/40">
+                          <Image src={img} alt={`Screenshot ${i}`} fill sizes="(max-width: 640px) 50vw, 200px" className="object-cover transition-transform group-hover/img:scale-105" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between pt-6 border-t border-border/40">
                   <div className="flex gap-2">
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" onClick={() => setDraft(selected)}>Edit Project</Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader><DialogTitle>Edit Portfolio Project</DialogTitle></DialogHeader>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                          <div className="space-y-3">
+                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Edit Portfolio Project</DialogTitle>
+                          <DialogDescription className="sr-only">Modify the details of your existing project.</DialogDescription>
+                        </DialogHeader>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                          <div className="space-y-4">
                             <div className="space-y-1">
                               <label className="text-xs font-bold uppercase text-muted-foreground">Title</label>
                               <Input placeholder="Project Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
@@ -322,7 +364,7 @@ export default function PortfolioProjectsPage() {
                               <label className="text-xs font-bold uppercase text-muted-foreground">Short Label</label>
                               <Input placeholder="e.g. Featured Build" value={draft.shortLabel} onChange={(e) => setDraft({ ...draft, shortLabel: e.target.value })} />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-1">
                                 <label className="text-xs font-bold uppercase text-muted-foreground">Year</label>
                                 <Input placeholder="2025" value={draft.year} onChange={(e) => setDraft({ ...draft, year: e.target.value })} />
@@ -336,30 +378,22 @@ export default function PortfolioProjectsPage() {
                               <label className="text-xs font-bold uppercase text-muted-foreground">URL</label>
                               <Input placeholder="https://..." value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold uppercase text-muted-foreground">Image URL</label>
-                              <Input placeholder="https://images.unsplash.com/..." value={draft.image} onChange={(e) => setDraft({ ...draft, image: e.target.value })} />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold uppercase text-muted-foreground">Layout</label>
-                              <Select value={draft.layout} onValueChange={(v: "feature" | "standard") => setDraft({ ...draft, layout: v })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="standard">Standard</SelectItem>
-                                  <SelectItem value="feature">Feature (Large)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <FileUploader 
+                              label="Project Image (Main)"
+                              currentImage={draft.image}
+                              onUploadComplete={(url) => setDraft({ ...draft, image: url })}
+                              path="portfolio/codingprojects"
+                            />
                           </div>
 
-                          <div className="space-y-3">
+                          <div className="space-y-4">
                             <div className="space-y-1">
                               <label className="text-xs font-bold uppercase text-muted-foreground">Summary</label>
                               <Textarea placeholder="Short hook..." value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} rows={2} />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold uppercase text-muted-foreground">Overview</label>
-                              <Textarea placeholder="Detailed overview..." value={draft.overview} onChange={(e) => setDraft({ ...draft, overview: e.target.value })} rows={3} />
+                              <Textarea placeholder="Detailed overview..." value={draft.overview} onChange={(e) => setDraft({ ...draft, overview: e.target.value })} rows={2} />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold uppercase text-muted-foreground">Challenge</label>
@@ -375,39 +409,65 @@ export default function PortfolioProjectsPage() {
                             </div>
                           </div>
 
-                          <div className="col-span-1 md:col-span-2 border-t pt-4 space-y-4">
+                          <div className="col-span-1 md:col-span-2 border-t pt-4 space-y-6">
                             <div className="space-y-2">
-                              <label className="text-xs font-bold uppercase text-muted-foreground">Tech Stack</label>
-                              <div className="flex gap-2">
-                                <Input placeholder="Next.js" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStackItem()} />
-                                <Button type="button" variant="outline" onClick={addStackItem}><PlusCircle className="w-4 h-4" /></Button>
-                              </div>
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {draft.stack?.map(tag => (
-                                  <Badge key={tag} variant="secondary" className="gap-1">
-                                    {tag}
-                                    <button onClick={() => removeStackItem(tag)} className="hover:text-destructive"><X className="w-3 h-3" /></button>
-                                  </Badge>
+                              <label className="text-xs font-bold uppercase text-muted-foreground">Gallery Images</label>
+                              <FileUploader 
+                                label="Add Screenshots"
+                                onUploadComplete={(url) => setDraft({ ...draft, images: [...(draft.images || []), url] })}
+                                path="portfolio/codingprojects/gallery"
+                                accept="image/*"
+                              />
+                              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                                {draft.images?.map((img, i) => (
+                                  <div key={i} className="aspect-square relative rounded-lg overflow-hidden border group">
+                                    <Image src={img} alt="Gallery" fill sizes="100px" className="object-cover" />
+                                    <button 
+                                      type="button"
+                                      onClick={() => setDraft({ ...draft, images: draft.images?.filter((_, idx) => idx !== i) })}
+                                      className="absolute top-1 right-1 p-1 bg-destructive text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
                                 ))}
                               </div>
                             </div>
 
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold uppercase text-muted-foreground">Metrics</label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <Input placeholder="Label (e.g. Speed)" value={newMetric.label} onChange={(e) => setNewMetric({ ...newMetric, label: e.target.value })} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground">Tech Stack</label>
                                 <div className="flex gap-2">
-                                  <Input placeholder="Value (e.g. 100%)" value={newMetric.value} onChange={(e) => setNewMetric({ ...newMetric, value: e.target.value })} />
-                                  <Button type="button" variant="outline" onClick={addMetricItem}><PlusCircle className="w-4 h-4" /></Button>
+                                  <Input placeholder="Next.js" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addStackItem()} />
+                                  <Button type="button" variant="outline" onClick={addStackItem}><PlusCircle className="w-4 h-4" /></Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {draft.stack?.map(tag => (
+                                    <Badge key={tag} variant="secondary" className="gap-1">
+                                      {tag}
+                                      <button type="button" onClick={() => removeStackItem(tag)} className="hover:text-destructive"><X className="w-3 h-3" /></button>
+                                    </Badge>
+                                  ))}
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-2 mt-2">
-                                {draft.metrics?.map((m, i) => (
-                                  <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted text-xs">
-                                    <span><strong>{m.value}</strong> {m.label}</span>
-                                    <button onClick={() => removeMetricItem(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase text-muted-foreground">Metrics</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Input placeholder="Label (e.g. Speed)" value={newMetric.label} onChange={(e) => setNewMetric({ ...newMetric, label: e.target.value })} />
+                                  <div className="flex gap-2">
+                                    <Input placeholder="Value (e.g. 100%)" value={newMetric.value} onChange={(e) => setNewMetric({ ...newMetric, value: e.target.value })} />
+                                    <Button type="button" variant="outline" onClick={addMetricItem}><PlusCircle className="w-4 h-4" /></Button>
                                   </div>
-                                ))}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  {draft.metrics?.map((m, i) => (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted text-xs">
+                                      <span><strong>{m.value}</strong> {m.label}</span>
+                                      <button type="button" onClick={() => removeMetricItem(i)} className="text-muted-foreground hover:text-destructive"><X className="w-3 h-3" /></button>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -446,3 +506,4 @@ export default function PortfolioProjectsPage() {
     </div>
   );
 }
+

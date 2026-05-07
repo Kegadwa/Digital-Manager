@@ -8,6 +8,7 @@ const nextConfig = {
       { protocol: "https", hostname: "cdn.jsdelivr.net" },
       { protocol: "https", hostname: "upload.wikimedia.org" },
       { protocol: "https", hostname: "images.pexels.com" },
+      { protocol: "https", hostname: "firebasestorage.googleapis.com" },
     ],
   },
 };

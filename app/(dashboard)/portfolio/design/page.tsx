@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Palette, Trash2, Image as ImageIcon, ExternalLink, PlusCircle, X, Edit2, Link as LinkIcon, User } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { usePortfolio } from "@/store/useAppStore";
+import { FileUploader } from "@/components/FileUploader";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -141,7 +142,7 @@ export default function DesignProjectsPage() {
               >
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                   {p.coverImage ? (
-                    <Image src={p.coverImage} alt={p.title} fill className="object-cover" />
+                    <Image src={p.coverImage} alt={p.title} fill sizes="48px" className="object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-5 h-5" /></div>
                   )}
@@ -161,7 +162,7 @@ export default function DesignProjectsPage() {
             <Card className="shadow-ios border-border/40 overflow-hidden">
               <div className="relative h-64 w-full bg-muted">
                 {selected.coverImage ? (
-                  <Image src={selected.coverImage} alt={selected.title} fill className="object-cover" />
+                  <Image src={selected.coverImage} alt={selected.title} fill sizes="(max-width: 768px) 100vw, 800px" priority className="object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-10 h-10" /></div>
                 )}
@@ -249,7 +250,7 @@ export default function DesignProjectsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {selected.images?.map((img, i) => (
                       <div key={i} className="aspect-square relative rounded-xl overflow-hidden bg-muted group/img">
-                        <Image src={img} alt={`Gallery ${i}`} fill className="object-cover transition-transform group-hover/img:scale-110" />
+                        <Image src={img} alt={`Gallery ${i}`} fill sizes="(max-width: 640px) 50vw, 200px" className="object-cover transition-transform group-hover/img:scale-110" />
                       </div>
                     ))}
                   </div>
@@ -269,7 +270,10 @@ export default function DesignProjectsPage() {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editMode ? "Edit Design Project" : "Add Design Project"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editMode ? "Edit Design Project" : "Add Design Project"}</DialogTitle>
+            <DialogDescription className="sr-only">Enter the details and gallery images for your design project.</DialogDescription>
+          </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
               <div className="space-y-1">
@@ -294,10 +298,14 @@ export default function DesignProjectsPage() {
                 <label className="text-xs font-bold uppercase text-muted-foreground">Client</label>
                 <Input placeholder="Client name (optional)" value={draft.client} onChange={(e) => setDraft({ ...draft, client: e.target.value })} />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Cover Image URL</label>
-                <Input placeholder="https://..." value={draft.coverImage} onChange={(e) => setDraft({ ...draft, coverImage: e.target.value })} />
-              </div>
+              
+              <FileUploader 
+                label="Cover Image"
+                currentImage={draft.coverImage}
+                onUploadComplete={(url) => setDraft({ ...draft, coverImage: url })}
+                path="portfolio/design"
+              />
+
               <div className="space-y-1">
                 <label className="text-xs font-bold uppercase text-muted-foreground">External URL</label>
                 <Input placeholder="Behance / Dribbble link" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
@@ -313,16 +321,32 @@ export default function DesignProjectsPage() {
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
                     Gallery Images
-                    <span className="text-[9px] lowercase font-normal opacity-70">Add image URLs one by one</span>
+                    <span className="text-[9px] lowercase font-normal opacity-70">Upload one or more images</span>
                 </label>
-                <div className="flex gap-2">
-                  <Input placeholder="https://..." value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("images", newImageUrl), setNewImageUrl(""))} />
-                  <Button type="button" variant="outline" size="icon" onClick={() => { addItem("images", newImageUrl); setNewImageUrl(""); }}><PlusCircle className="w-4 h-4" /></Button>
+                
+                <div className="grid grid-cols-2 gap-2">
+                   <FileUploader 
+                    onUploadComplete={(url) => url && addItem("images", url)}
+                    path="portfolio/design/gallery"
+                    label=""
+                    className="min-h-[100px]"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <Input 
+                      placeholder="Or paste URL..." 
+                      value={newImageUrl} 
+                      onChange={(e) => setNewImageUrl(e.target.value)} 
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("images", newImageUrl), setNewImageUrl(""))} 
+                      className="text-xs"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { addItem("images", newImageUrl); setNewImageUrl(""); }} className="h-8">Add URL</Button>
+                  </div>
                 </div>
+
                 <div className="flex flex-wrap gap-2 mt-2">
                   {draft.images?.map(img => (
                     <div key={img} className="relative w-12 h-12 rounded-md overflow-hidden bg-muted group">
-                        <Image src={img} alt="Thumb" fill className="object-cover" />
+                        <Image src={img} alt="Thumb" fill className="object-cover" unoptimized={true} />
                         <button onClick={() => removeItem("images", img)} className="absolute inset-0 bg-destructive/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <X className="w-3 h-3" />
                         </button>

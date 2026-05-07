@@ -142,6 +142,7 @@ export interface PortfolioProject {
   stack: string[];
   metrics: PortfolioProjectMetric[];
   layout: "feature" | "standard";
+  images?: string[];
 }
 
 export interface Experience {

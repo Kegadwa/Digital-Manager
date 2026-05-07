@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Code2, Trash2, Link as LinkIcon, Box, Edit2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { usePortfolio } from "@/store/useAppStore";
 import { SortablePortfolioList } from "@/components/SortablePortfolioList";
+import { FileUploader } from "@/components/FileUploader";
 import { toast } from "sonner";
 import Image from "next/image";
 import type { Tool } from "@/types";
@@ -58,7 +59,7 @@ export default function ToolsPage() {
       <CardContent className="p-4 flex items-center gap-4 relative">
         <div className="w-10 h-10 relative flex items-center justify-center bg-muted rounded-lg p-1.5 shrink-0">
           {tool.logo ? (
-            <Image src={tool.logo} alt={tool.name} width={40} height={40} className="object-contain" />
+            <Image src={tool.logo} alt={tool.name} width={40} height={40} className="object-contain" unoptimized={true} />
           ) : (
             <Code2 className="w-6 h-6 text-muted-foreground/40" />
           )}
@@ -111,16 +112,23 @@ export default function ToolsPage() {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editId ? "Edit Tool" : "Add Tool"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editId ? "Edit Tool" : "Add Tool"}</DialogTitle>
+            <DialogDescription className="sr-only">Enter the name and icon for your tech stack tool.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
               <label className="text-xs font-bold uppercase text-muted-foreground">Tool Name</label>
               <Input placeholder="e.g. Next.js" value={draft.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, name: e.target.value })} />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold uppercase text-muted-foreground">Logo URL (SVG/PNG)</label>
-              <Input placeholder="https://cdn.jsdelivr.net..." value={draft.logo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, logo: e.target.value })} />
-            </div>
+            
+            <FileUploader 
+              label="Tool Icon"
+              currentImage={draft.logo}
+              onUploadComplete={(url) => setDraft({ ...draft, logo: url })}
+              path="portfolio/tools"
+              accept="image/*"
+            />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
