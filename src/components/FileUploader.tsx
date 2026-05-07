@@ -25,6 +25,7 @@ interface FileUploaderProps {
   label?: string;
   className?: string;
   accept?: string;
+  multiple?: boolean;
   maxSizeMB?: number;
 }
 
@@ -34,6 +35,7 @@ export function FileUploader({
   currentImage, 
   label = "Upload File",
   className,
+  multiple = false,
   accept = "image/*,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   maxSizeMB = 300 // Support up to 300MB
 }: FileUploaderProps) {
@@ -55,27 +57,91 @@ export function FileUploader({
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
 
-    if (selectedFile.size > maxSizeMB * 1024 * 1024) {
-      toast.error(`File is too large. Maximum size is ${maxSizeMB}MB`);
-      return;
-    }
+    if (!multiple) {
+      const selectedFile = selectedFiles[0];
+      if (selectedFile.size > maxSizeMB * 1024 * 1024) {
+        toast.error(`File is too large. Maximum size is ${maxSizeMB}MB`);
+        return;
+      }
 
-    setFile(selectedFile);
-    
-    if (isImage(selectedFile.type) && selectedFile.size < 20 * 1024 * 1024) { // Preview only if < 20MB
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
+      setFile(selectedFile);
+      
+      if (isImage(selectedFile.type) && selectedFile.size < 20 * 1024 * 1024) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+      } else {
+        setPreview(null);
+      }
+
+      await handleUpload(selectedFile);
     } else {
-      setPreview(null);
-    }
+      // Multiple files upload
+      setUploading(true);
+      setProgress(0);
+      let successCount = 0;
 
-    await handleUpload(selectedFile);
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        if (file.size > maxSizeMB * 1024 * 1024) {
+          toast.error(`${file.name} is too large. Skipping.`);
+          continue;
+        }
+
+        try {
+          const url = await new Promise<string | null>((resolve, reject) => {
+            const uploadLogic = async () => {
+              try {
+                let blob: Blob = file;
+                if (isImage(file.type) && file.size > 1 * 1024 * 1024 && file.size < 50 * 1024 * 1024) {
+                  const options = { maxSizeMB: 2, maxWidthOrHeight: 2560, useWebWorker: true };
+                  blob = await imageCompression(file, options).catch(() => file);
+                }
+
+                const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+                const storageRef = ref(storage, `${path}/${fileName}`);
+                const uploadTask = uploadBytesResumable(storageRef, blob);
+
+                uploadTask.on("state_changed", 
+                  (snapshot) => {
+                    const fileProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    setProgress(fileProgress);
+                  },
+                  (err) => reject(err),
+                  async () => {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve(downloadURL);
+                  }
+                );
+              } catch (err) {
+                reject(err);
+              }
+            };
+            uploadLogic();
+          });
+
+          if (url) {
+            onUploadComplete(url);
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to upload ${file.name}:`, err);
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      }
+
+      setUploading(false);
+      setProgress(0);
+      if (successCount > 0) {
+        toast.success(`Successfully uploaded ${successCount} file(s)`);
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleUpload = async (fileToUpload: File) => {
@@ -87,9 +153,7 @@ export function FileUploader({
     try {
       let blob: Blob = fileToUpload;
 
-      // Only compress images and only if they are reasonable size
       if (isImage(fileToUpload.type) && fileToUpload.size > 1 * 1024 * 1024) {
-        // If file is > 50MB, skip compression to avoid crashing tab
         if (fileToUpload.size < 50 * 1024 * 1024) {
           toast.info("Optimizing image...");
           const options = {
@@ -159,11 +223,10 @@ export function FileUploader({
         {(preview || (file && !isImage(file.type)) || (!file && currentImage)) ? (
           <div className="relative w-full flex flex-col items-center justify-center p-4">
             {(preview || (currentImage && (isImage(file?.type || "image/") || !file))) ? (
-              // Show image if it's an image preview or if it's the currentImage and we don't have a new file yet
               (isImage(file?.type || "") || (!file && currentImage && (currentImage.match(/\.(jpg|jpeg|png|gif|webp|avif)/i)))) ? (
                 <div className="relative w-full aspect-video rounded-lg overflow-hidden border">
                   <Image 
-                    src={preview || currentImage || ""} 
+                    src={preview || currentImage || "" as any} 
                     alt="Preview" 
                     fill 
                     className={cn("object-cover transition-opacity duration-300", uploading ? "opacity-40" : "opacity-100")} 
@@ -221,6 +284,7 @@ export function FileUploader({
           ref={fileInputRef} 
           className="hidden" 
           accept={accept} 
+          multiple={multiple}
           onChange={handleFileChange}
           disabled={uploading}
         />

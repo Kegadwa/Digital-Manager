@@ -98,9 +98,11 @@ export default function DesignProjectsPage() {
 
   const addItem = (field: keyof DesignProject, value: string) => {
     if (!value.trim()) return;
-    const current = (draft[field] as string[]) || [];
-    if (current.includes(value.trim())) return;
-    setDraft({ ...draft, [field]: [...current, value.trim()] });
+    setDraft(prev => {
+      const current = (prev[field] as string[]) || [];
+      if (current.includes(value.trim())) return prev;
+      return { ...prev, [field]: [...current, value.trim()] };
+    });
   };
 
   const removeItem = (field: keyof DesignProject, value: string) => {
@@ -120,7 +122,148 @@ export default function DesignProjectsPage() {
         title="Design Portfolio"
         description="Manage your graphic design, branding, and visual projects."
         actions={
-          <Button size="sm" onClick={handleOpenAdd}><Plus className="w-4 h-4" />Add Design Project</Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <Button size="sm" onClick={handleOpenAdd}><Plus className="w-4 h-4" />Add Design Project</Button>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editMode ? "Edit Design Project" : "Add Design Project"}</DialogTitle>
+                <DialogDescription className="sr-only">Enter the details and gallery images for your design project.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Title</label>
+                    <Input placeholder="Project Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Tagline</label>
+                    <Input placeholder="Short one-liner hook..." value={draft.tagline} onChange={(e) => setDraft({ ...draft, tagline: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Category</label>
+                      <Input placeholder="e.g. Brand Design" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Year</label>
+                      <Input placeholder="2025" value={draft.year} onChange={(e) => setDraft({ ...draft, year: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Client</label>
+                    <Input placeholder="Client name (optional)" value={draft.client} onChange={(e) => setDraft({ ...draft, client: e.target.value })} />
+                  </div>
+                  
+                  <FileUploader 
+                    label="Cover Image"
+                    currentImage={draft.coverImage}
+                    onUploadComplete={(url) => setDraft({ ...draft, coverImage: url })}
+                    path={`Portforlio/designprojects/${draft.title?.replace(/\s+/g, '-').toLowerCase() || 'unnamed'}`}
+                  />
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">External URL</label>
+                    <Input placeholder="Behance / Dribbble link" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Summary</label>
+                    <Textarea placeholder="2-3 sentence description..." value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} rows={4} />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Gallery */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
+                        Gallery Images
+                        <span className="text-[9px] lowercase font-normal opacity-70">Upload one or more images</span>
+                    </label>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                       <FileUploader 
+                        onUploadComplete={(url) => url && addItem("images", url)}
+                        multiple={true}
+                        path={`Portforlio/designprojects/${draft.title?.replace(/\s+/g, '-').toLowerCase() || 'unnamed'}/additional`}
+                        label=""
+                        className="min-h-[100px]"
+                      />
+                      <div className="flex flex-col gap-2">
+                        <Input 
+                          placeholder="Or paste URL..." 
+                          value={newImageUrl} 
+                          onChange={(e) => setNewImageUrl(e.target.value)} 
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("images", newImageUrl), setNewImageUrl(""))} 
+                          className="text-xs"
+                        />
+                        <Button type="button" variant="outline" size="sm" onClick={() => { addItem("images", newImageUrl); setNewImageUrl(""); }} className="h-8">Add URL</Button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {draft.images?.filter(img => !!img).map((img, i) => (
+                        <div key={i} className="aspect-square relative rounded-lg overflow-hidden border group">
+                          <Image src={img} alt="Thumb" fill className="object-cover" unoptimized={true} />
+                          <button 
+                            type="button"
+                            onClick={() => setDraft({ ...draft, images: draft.images?.filter((_, idx) => idx !== i) })}
+                            className="absolute top-1 right-1 p-1 bg-destructive text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tools & Tags */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Tools</label>
+                      <div className="flex gap-1">
+                        <Input placeholder="Figma" value={newTool} onChange={(e) => setNewTool(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("tools", newTool), setNewTool(""))} />
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {draft.tools?.map(t => <Badge key={t} variant="secondary" className="text-[10px] gap-1 px-1.5">{t}<X className="w-2.5 h-2.5 cursor-pointer" onClick={() => removeItem("tools", t)}/></Badge>)}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Tags</label>
+                      <div className="flex gap-1">
+                        <Input placeholder="Print" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("tags", newTag), setNewTag(""))} />
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {draft.tags?.map(t => <Badge key={t} className="text-[10px] gap-1 px-1.5">{t}<X className="w-2.5 h-2.5 cursor-pointer" onClick={() => removeItem("tags", t)}/></Badge>)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Credits */}
+                  <div className="space-y-3 p-4 rounded-2xl bg-muted/50 border border-border/40">
+                    <label className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2"><User className="w-3 h-3" /> Credits</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input placeholder="Role (e.g. Photography)" value={newCredit.role} onChange={(e) => setNewCredit({ ...newCredit, role: e.target.value })} />
+                      <div className="flex gap-2">
+                        <Input placeholder="Name" value={newCredit.name} onChange={(e) => setNewCredit({ ...newCredit, name: e.target.value })} />
+                        <Button type="button" variant="outline" size="icon" onClick={addCredit}><PlusCircle className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {draft.credits?.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-background text-[11px] border border-border/40">
+                          <span><span className="opacity-60">{c.role}:</span> <strong>{c.name}</strong></span>
+                          <X className="w-3 h-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => setDraft({ ...draft, credits: draft.credits?.filter((_, idx) => idx !== i) })} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="border-t pt-4 mt-2">
+                <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving..." : (editMode ? "Save Changes" : "Add Project")}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         }
       />
 
@@ -248,7 +391,7 @@ export default function DesignProjectsPage() {
                     <ImageIcon className="w-4 h-4" /> Gallery ({selected.images?.length || 0})
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {selected.images?.map((img, i) => (
+                    {selected.images?.filter(img => !!img).map((img, i) => (
                       <div key={i} className="aspect-square relative rounded-xl overflow-hidden bg-muted group/img">
                         <Image src={img} alt={`Gallery ${i}`} fill sizes="(max-width: 640px) 50vw, 200px" className="object-cover transition-transform group-hover/img:scale-110" />
                       </div>
@@ -268,142 +411,7 @@ export default function DesignProjectsPage() {
         )}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editMode ? "Edit Design Project" : "Add Design Project"}</DialogTitle>
-            <DialogDescription className="sr-only">Enter the details and gallery images for your design project.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Title</label>
-                <Input placeholder="Project Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Tagline</label>
-                <Input placeholder="Short one-liner hook..." value={draft.tagline} onChange={(e) => setDraft({ ...draft, tagline: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase text-muted-foreground">Category</label>
-                  <Input placeholder="e.g. Brand Design" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase text-muted-foreground">Year</label>
-                  <Input placeholder="2025" value={draft.year} onChange={(e) => setDraft({ ...draft, year: e.target.value })} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Client</label>
-                <Input placeholder="Client name (optional)" value={draft.client} onChange={(e) => setDraft({ ...draft, client: e.target.value })} />
-              </div>
-              
-              <FileUploader 
-                label="Cover Image"
-                currentImage={draft.coverImage}
-                onUploadComplete={(url) => setDraft({ ...draft, coverImage: url })}
-                path="portfolio/design"
-              />
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">External URL</label>
-                <Input placeholder="Behance / Dribbble link" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase text-muted-foreground">Summary</label>
-                <Textarea placeholder="2-3 sentence description..." value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} rows={4} />
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {/* Gallery */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
-                    Gallery Images
-                    <span className="text-[9px] lowercase font-normal opacity-70">Upload one or more images</span>
-                </label>
-                
-                <div className="grid grid-cols-2 gap-2">
-                   <FileUploader 
-                    onUploadComplete={(url) => url && addItem("images", url)}
-                    path="portfolio/design/gallery"
-                    label=""
-                    className="min-h-[100px]"
-                  />
-                  <div className="flex flex-col gap-2">
-                    <Input 
-                      placeholder="Or paste URL..." 
-                      value={newImageUrl} 
-                      onChange={(e) => setNewImageUrl(e.target.value)} 
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("images", newImageUrl), setNewImageUrl(""))} 
-                      className="text-xs"
-                    />
-                    <Button type="button" variant="outline" size="sm" onClick={() => { addItem("images", newImageUrl); setNewImageUrl(""); }} className="h-8">Add URL</Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {draft.images?.map(img => (
-                    <div key={img} className="relative w-12 h-12 rounded-md overflow-hidden bg-muted group">
-                        <Image src={img} alt="Thumb" fill className="object-cover" unoptimized={true} />
-                        <button onClick={() => removeItem("images", img)} className="absolute inset-0 bg-destructive/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <X className="w-3 h-3" />
-                        </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tools & Tags */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-muted-foreground">Tools</label>
-                  <div className="flex gap-1">
-                    <Input placeholder="Figma" value={newTool} onChange={(e) => setNewTool(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("tools", newTool), setNewTool(""))} />
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {draft.tools?.map(t => <Badge key={t} variant="secondary" className="text-[10px] gap-1 px-1.5">{t}<X className="w-2.5 h-2.5 cursor-pointer" onClick={() => removeItem("tools", t)}/></Badge>)}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-muted-foreground">Tags</label>
-                  <div className="flex gap-1">
-                    <Input placeholder="Print" value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addItem("tags", newTag), setNewTag(""))} />
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {draft.tags?.map(t => <Badge key={t} className="text-[10px] gap-1 px-1.5">{t}<X className="w-2.5 h-2.5 cursor-pointer" onClick={() => removeItem("tags", t)}/></Badge>)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Credits */}
-              <div className="space-y-3 p-4 rounded-2xl bg-muted/50 border border-border/40">
-                <label className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2"><User className="w-3 h-3" /> Credits</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input placeholder="Role (e.g. Photography)" value={newCredit.role} onChange={(e) => setNewCredit({ ...newCredit, role: e.target.value })} />
-                  <div className="flex gap-2">
-                    <Input placeholder="Name" value={newCredit.name} onChange={(e) => setNewCredit({ ...newCredit, name: e.target.value })} />
-                    <Button type="button" variant="outline" size="icon" onClick={addCredit}><PlusCircle className="w-4 h-4" /></Button>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  {draft.credits?.map((c, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-background text-[11px] border border-border/40">
-                      <span><span className="opacity-60">{c.role}:</span> <strong>{c.name}</strong></span>
-                      <X className="w-3 h-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => setDraft({ ...draft, credits: draft.credits?.filter((_, idx) => idx !== i) })} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="border-t pt-4 mt-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={isSaving}>{isSaving ? "Saving..." : (editMode ? "Save Changes" : "Add Project")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
+

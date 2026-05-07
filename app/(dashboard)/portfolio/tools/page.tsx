@@ -126,7 +126,7 @@ export default function ToolsPage() {
               label="Tool Icon"
               currentImage={draft.logo}
               onUploadComplete={(url) => setDraft({ ...draft, logo: url })}
-              path="portfolio/tools"
+              path="Portforlio/tools"
               accept="image/*"
             />
           </div>
