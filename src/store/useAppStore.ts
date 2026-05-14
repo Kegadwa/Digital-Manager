@@ -210,7 +210,8 @@ export function useNotes() {
   const addNote = (n: Partial<Note>) => setNotes([{ ...n, id: uid(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Note, ...notes]);
   const removeNote = (id: string) => setNotes(notes.filter(n => n.id !== id));
   const togglePin = (id: string) => setNotes(notes.map(n => n.id === id ? { ...n, pinned: !n.pinned, updatedAt: new Date().toISOString() } : n));
-  return { notes, addNote, removeNote, togglePin };
+  const updateNote = (id: string, updates: Partial<Note>) => setNotes(notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n));
+  return { notes, addNote, removeNote, togglePin, updateNote };
 }
 
 export function useFiles() {

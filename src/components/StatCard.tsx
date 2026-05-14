@@ -19,9 +19,19 @@ const accents = {
   mono: "text-foreground bg-muted",
 };
 
+const glowMap = {
+  primary: "group-hover:shadow-[0_0_24px_rgba(var(--primary-rgb,59,130,246),0.12)]",
+  success: "group-hover:shadow-[0_0_24px_rgba(34,197,94,0.12)]",
+  destructive: "group-hover:shadow-[0_0_24px_rgba(239,68,68,0.12)]",
+  warning: "group-hover:shadow-[0_0_24px_rgba(234,179,8,0.12)]",
+  mono: "group-hover:shadow-[0_0_24px_rgba(148,163,184,0.08)]",
+};
+
 export function StatCard({ label, value, delta, icon: Icon, accent = "primary", onClick }: StatCardProps) {
   const content = (
     <CardContent className="p-5 relative overflow-hidden text-left w-full">
+      {/* Subtle gradient glow on hover */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-primary/5 opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500" />
       <div className="relative flex items-start justify-between gap-3">
         <div className="space-y-1.5 min-w-0">
@@ -54,7 +64,9 @@ export function StatCard({ label, value, delta, icon: Icon, accent = "primary", 
   return (
     <Card 
       className={cn(
-        "group animate-in-up [transform-style:preserve-3d] hover:[transform:perspective(900px)_rotateX(4deg)_rotateY(-2deg)_translateY(-4px)] transition-all duration-300",
+        "group animate-in-up border-white/[0.08] hover:border-white/20 transition-all duration-300",
+        "[transform-style:preserve-3d] hover:[transform:perspective(900px)_rotateX(4deg)_rotateY(-2deg)_translateY(-4px)]",
+        glowMap[accent],
         onClick && "cursor-pointer active:scale-95"
       )}
       onClick={onClick}

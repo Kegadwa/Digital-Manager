@@ -62,24 +62,27 @@ export function PaymentCard({ method, onDelete, onClick, className }: PaymentCar
         "group relative aspect-[1.586/1] w-full rounded-2xl overflow-hidden",
         "text-white select-none",
         onClick ? "cursor-pointer" : "cursor-default",
-        "transition-transform duration-500 ease-spring",
+        "transition-all duration-500 ease-spring",
         "[transform-style:preserve-3d] hover:[transform:perspective(1200px)_rotateY(-6deg)_rotateX(4deg)_translateZ(0)]",
         "shadow-ios hover:shadow-float",
+        "bg-white/[0.05] backdrop-blur-xl border border-white/[0.08]",
         className
       )}
       style={{
-        background: `linear-gradient(135deg, ${baseColor} 0%, ${baseColor}dd 50%, #000000 140%)`,
+        borderTopColor: baseColor,
+        borderTopWidth: '2px',
+        boxShadow: `0 0 30px ${baseColor}15, 0 8px 32px rgba(0,0,0,0.3)`,
       }}
     >
       {/* Glossy sheen */}
       <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-           style={{ background: "linear-gradient(115deg, transparent 35%, hsl(0 0% 100% / 0.22) 50%, transparent 65%)" }} />
+           style={{ background: "linear-gradient(115deg, transparent 35%, hsl(0 0% 100% / 0.12) 50%, transparent 65%)" }} />
       {/* Soft top highlight */}
       <div className="absolute inset-x-0 top-0 h-1/2 pointer-events-none"
-           style={{ background: "linear-gradient(180deg, hsl(0 0% 100% / 0.12), transparent)" }} />
-      {/* Decorative orbs */}
-      <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-2xl opacity-30"
-           style={{ background: "hsl(0 0% 100% / 0.4)" }} />
+           style={{ background: "linear-gradient(180deg, hsl(0 0% 100% / 0.06), transparent)" }} />
+      {/* Decorative orb with card color */}
+      <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full blur-3xl opacity-20"
+           style={{ background: baseColor }} />
 
       <div className="relative h-full flex flex-col justify-between p-4 sm:p-5">
         {/* Top row */}

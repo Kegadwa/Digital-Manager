@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { SlideDrawer, DrawerForm } from "@/components/ui/slide-drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, ArrowDownRight, ArrowUpRight, Wallet, PiggyBank, Download, CreditCard, Tag, Search, HandCoins, Info, Coins } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -402,49 +403,45 @@ export default function FinancePage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4" />Add</Button></DialogTrigger>
-              <DialogContent className="rounded-2xl">
-                <DialogHeader><DialogTitle>New transaction</DialogTitle></DialogHeader>
-                <div className="space-y-4 py-2">
-                  <Tabs value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as TransactionType, categoryId: "" })}>
-                    <TabsList className="grid grid-cols-2 w-full">
-                      <TabsTrigger value="expense">Expense</TabsTrigger>
-                      <TabsTrigger value="income">Income</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <Input type="number" placeholder="Amount" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} autoFocus />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Select value={draft.categoryId} onValueChange={(v) => setDraft({ ...draft, categoryId: v })}>
-                      <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-                      <SelectContent>
-                        {draftCats.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            <span className="flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.color }} />{c.name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={draft.methodId} onValueChange={(v) => setDraft({ ...draft, methodId: v })}>
-                      <SelectTrigger><SelectValue placeholder="Method" /></SelectTrigger>
-                      <SelectContent>
-                        {methodsList.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Input placeholder="Description (optional)" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+            <Button size="sm" onClick={() => setOpen(true)}><Plus className="w-4 h-4" />Add</Button>
+            <SlideDrawer open={open} onOpenChange={setOpen} title="New transaction" description="Add income or expense.">
+              <DrawerForm onSubmit={handleAdd} submitLabel="Add" onCancel={() => setOpen(false)}>
+                <Tabs value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as TransactionType, categoryId: "" })}>
+                  <TabsList className="grid grid-cols-2 w-full">
+                    <TabsTrigger value="expense">Expense</TabsTrigger>
+                    <TabsTrigger value="income">Income</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Input type="number" placeholder="Amount" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} autoFocus />
+                <div className="grid grid-cols-2 gap-3">
+                  <Select value={draft.categoryId} onValueChange={(v) => setDraft({ ...draft, categoryId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+                    <SelectContent>
+                      {draftCats.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.color }} />{c.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={draft.methodId} onValueChange={(v) => setDraft({ ...draft, methodId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Method" /></SelectTrigger>
+                    <SelectContent>
+                      {methodsList.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input placeholder="Description (optional)" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Date <span className="text-muted-foreground/50">(defaults to today)</span></p>
                   <Input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
                 </div>
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAdd}>Add</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+              </DrawerForm>
+            </SlideDrawer>
           </div>
         }
       />
@@ -650,9 +647,9 @@ export default function FinancePage() {
             </Select>
           </CardHeader>
           <CardContent>
-            <div className="h-[280px] -ml-2">
+            <div className="h-[320px] -ml-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trendData}>
+                <BarChart data={trendData} barSize={16} barGap={8}>
                   <defs>
                     <linearGradient id="incBG" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={1} />
@@ -668,8 +665,8 @@ export default function FinancePage() {
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${currency}${v}`} />
                   <Tooltip content={<FrostedTooltip formatter={(v) => `${currency} ${v.toLocaleString()}`} />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
                   <Legend wrapperStyle={{ fontSize: "12px" }} iconType="circle" />
-                  <Bar dataKey="income" fill="url(#incBG)" radius={[8, 8, 0, 0]} animationDuration={1100} />
-                  <Bar dataKey="expense" fill="url(#expBG)" radius={[8, 8, 0, 0]} animationDuration={1100} animationBegin={200} />
+                  <Bar dataKey="income" fill="url(#incBG)" radius={[6, 6, 0, 0]} animationDuration={1100} />
+                  <Bar dataKey="expense" fill="url(#expBG)" radius={[6, 6, 0, 0]} animationDuration={1100} animationBegin={200} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SlideDrawer, DrawerForm } from "@/components/ui/slide-drawer";
+import { InlineEdit } from "@/components/InlineEdit";
 import { Plus, Folder, Calendar, CheckSquare, MessageSquare, Trash2, Activity, Milestone, FileText } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { useProjects, useTasks, taskProgress, useWorkspaceProjects } from "@/store/useAppStore";
@@ -31,15 +33,22 @@ const activityIcon = {
   milestone: Milestone,
 };
 
+const activityDotColor: Record<string, string> = {
+  note: "bg-blue-500",
+  task: "bg-green-500",
+  status: "bg-orange-500",
+  milestone: "bg-purple-500",
+};
+
 export default function ProjectsPage() {
   const { projects, addProject, updateProject, removeProject, addActivity } = useProjects();
   const { tasks, addTask } = useTasks();
-  const [open, setOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ name: "", description: "", color: "#45B1E8", status: "active" as ProjectStatus, dueDate: "" });
   const [noteDraft, setNoteDraft] = useState("");
   const [taskDraft, setTaskDraft] = useState({ title: "", priority: "medium" as Priority, dueDate: "" });
-  const [taskOpen, setTaskOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
   const { unifiedProjects } = useWorkspaceProjects();
@@ -75,7 +84,7 @@ export default function ProjectsPage() {
       });
       toast.success("Project created");
       setDraft({ name: "", description: "", color: "#45B1E8", status: "active", dueDate: "" });
-      setOpen(false);
+      setDrawerOpen(false);
     } finally {
       setIsCreating(false);
     }
@@ -101,7 +110,7 @@ export default function ProjectsPage() {
     addActivity(selected.id, { type: "task", message: `Added task: "${taskDraft.title.trim()}"` });
     toast.success("Task added & linked to project");
     setTaskDraft({ title: "", priority: "medium", dueDate: "" });
-    setTaskOpen(false);
+    setTaskDrawerOpen(false);
   };
 
   return (
@@ -110,38 +119,54 @@ export default function ProjectsPage() {
         title="Projects"
         description="Plan, track activity, and link tasks across your work."
         actions={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4" />New project</Button></DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Create project</DialogTitle></DialogHeader>
-              <div className="space-y-3 py-2">
-                <Input placeholder="Project name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
-                <Textarea placeholder="Description" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-                <div className="grid grid-cols-3 gap-2">
-                  <Select value={draft.status} onValueChange={(v: ProjectStatus) => setDraft({ ...draft, status: v })}>
-                    <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planning">Planning</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="on_hold">On hold</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input type="color" className="p-1 h-9" value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} />
-                </div>
-                <Input type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} />
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreate} disabled={isCreating}>{isCreating ? "Creating..." : "Create"}</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" onClick={() => setDrawerOpen(true)}>
+            <Plus className="w-4 h-4" />New project
+          </Button>
         }
       />
 
+      {/* ── Create Project Drawer ── */}
+      <SlideDrawer open={drawerOpen} onOpenChange={setDrawerOpen} title="Create project" description="Set up a new project workspace.">
+        <DrawerForm onSubmit={handleCreate} submitLabel="Create" isSubmitting={isCreating} onCancel={() => setDrawerOpen(false)}>
+          <Input placeholder="Project name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
+          <Textarea placeholder="Description" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          <div className="grid grid-cols-3 gap-2">
+            <Select value={draft.status} onValueChange={(v: ProjectStatus) => setDraft({ ...draft, status: v })}>
+              <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="planning">Planning</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="on_hold">On hold</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input type="color" className="p-1 h-9" value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} />
+          </div>
+          <Input type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} />
+        </DrawerForm>
+      </SlideDrawer>
+
+      {/* ── Add Task to Project Drawer ── */}
+      <SlideDrawer open={taskDrawerOpen} onOpenChange={setTaskDrawerOpen} title={`Add task to ${selected?.name || "project"}`}>
+        <DrawerForm onSubmit={handleAddTask} submitLabel="Add task" onCancel={() => setTaskDrawerOpen(false)}>
+          <Input placeholder="Task title" value={taskDraft.title} onChange={(e) => setTaskDraft({ ...taskDraft, title: e.target.value })} autoFocus />
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={taskDraft.priority} onValueChange={(v: Priority) => setTaskDraft({ ...taskDraft, priority: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input type="date" value={taskDraft.dueDate} onChange={(e) => setTaskDraft({ ...taskDraft, dueDate: e.target.value })} />
+          </div>
+        </DrawerForm>
+      </SlideDrawer>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-        <Card className="lg:col-span-1 shadow-card border-border/60">
+        {/* ── Project List Sidebar ── */}
+        <Card className="lg:col-span-1 border-border/40">
           <CardHeader><CardTitle className="text-base font-display">All projects</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {unifiedProjects.length === 0 && <p className="text-sm text-muted-foreground py-8 text-center">No projects yet</p>}
@@ -154,7 +179,7 @@ export default function ProjectsPage() {
                   onClick={() => setSelectedId(p.id)}
                   className={cn(
                     "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all border animate-in-up",
-                    (selectedId === p.id || (!selectedId && i === 0)) ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/50"
+                    (selectedId === p.id || (!selectedId && i === 0)) ? "border-primary/40 bg-primary/5" : "border-transparent hover:bg-muted/40"
                   )}
                   style={{ animationDelay: `${i * 40}ms` }}
                 >
@@ -176,14 +201,21 @@ export default function ProjectsPage() {
           </CardContent>
         </Card>
 
+        {/* ── Project Detail ── */}
         {selected ? (
           <div className="lg:col-span-2 space-y-4">
-            <Card className="shadow-card border-border/60 animate-in-up overflow-hidden">
+            {/* Header card */}
+            <Card className="border-border/40 animate-in-up overflow-hidden">
               <div className="h-2" style={{ background: selected.color }} />
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <CardTitle className="text-xl font-display">{selectedUnified?.name || selected.name}</CardTitle>
+                    <InlineEdit
+                      value={selectedUnified?.name || selected.name}
+                      onSave={(val) => { updateProject(selected.id, { name: val }); toast.success("Name updated"); }}
+                      className="text-xl font-display font-bold"
+                      as="h2"
+                    />
                     {(selectedUnified?.description || selected.description) && <CardDescription className="mt-1">{selectedUnified?.description || selected.description}</CardDescription>}
                     <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-muted-foreground">
                       <Badge variant="secondary" className={cn(isExternal ? "bg-indigo-500/10 text-indigo-500" : statusColors[selected.status])}>
@@ -218,9 +250,9 @@ export default function ProjectsPage() {
                     </div>
                     <Progress value={projectProgress} className="h-2" />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Select value={selected.status} onValueChange={(v: ProjectStatus) => { updateProject(selected.id, { status: v }); addActivity(selected.id, { type: "status", message: `Status changed to ${v.replace("_", " ")}` }); toast.success("Status updated"); }}>
-                      <SelectTrigger className="col-span-3 sm:col-span-1"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-auto"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="planning">Planning</SelectItem>
                         <SelectItem value="active">Active</SelectItem>
@@ -228,105 +260,108 @@ export default function ProjectsPage() {
                         <SelectItem value="completed">Completed</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Dialog open={taskOpen} onOpenChange={setTaskOpen}>
-                      <DialogTrigger asChild><Button variant="outline" className="col-span-3 sm:col-span-2"><Plus className="w-4 h-4" />Add task to this project</Button></DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader><DialogTitle>Add task to {selected.name}</DialogTitle></DialogHeader>
-                        <div className="space-y-3 py-2">
-                          <Input placeholder="Task title" value={taskDraft.title} onChange={(e) => setTaskDraft({ ...taskDraft, title: e.target.value })} autoFocus />
-                          <div className="grid grid-cols-2 gap-2">
-                            <Select value={taskDraft.priority} onValueChange={(v: Priority) => setTaskDraft({ ...taskDraft, priority: v })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input type="date" value={taskDraft.dueDate} onChange={(e) => setTaskDraft({ ...taskDraft, dueDate: e.target.value })} />
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="ghost" onClick={() => setTaskOpen(false)}>Cancel</Button>
-                          <Button onClick={handleAddTask}>Add task</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                    <Button variant="outline" onClick={() => setTaskDrawerOpen(true)}>
+                      <Plus className="w-4 h-4" />Add task
+                    </Button>
                   </div>
                 </CardContent>
               )}
             </Card>
 
+            {/* ── Tabbed Detail View: Tasks | Activity ── */}
             {!isExternal && (
-              <>
-                <Card className="shadow-card border-border/60 animate-in-up stagger-1">
-                  <CardHeader>
-                    <CardTitle className="text-base font-display flex items-center gap-2"><CheckSquare className="w-4 h-4" />Linked tasks ({projectTasks.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {projectTasks.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No tasks linked yet</p>}
-                    {projectTasks.map((t) => {
-                      const prog = taskProgress(t);
-                      return (
-                        <div key={t.id} className="p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors animate-in-up">
-                          <div className="flex items-center gap-2">
-                            <span className={cn("w-2 h-2 rounded-full",
-                              t.priority === "high" && "bg-destructive",
-                              t.priority === "medium" && "bg-warning",
-                              t.priority === "low" && "bg-success",
-                            )} />
-                            <p className={cn("text-sm font-medium flex-1 truncate", t.status === "done" && "line-through text-muted-foreground")}>{t.title}</p>
-                            <span className="text-xs text-muted-foreground tabular-nums">{prog}%</span>
-                          </div>
-                          <Progress value={prog} className="h-1 mt-2" />
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
+              <Tabs defaultValue="tasks" className="animate-in-up stagger-1">
+                <TabsList className="w-full grid grid-cols-2">
+                  <TabsTrigger value="tasks" className="gap-1.5">
+                    <CheckSquare className="w-3.5 h-3.5" />Tasks ({projectTasks.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="activity" className="gap-1.5">
+                    <Activity className="w-3.5 h-3.5" />Activity
+                  </TabsTrigger>
+                </TabsList>
 
-                <Card className="shadow-card border-border/60 animate-in-up stagger-2">
-                  <CardHeader>
-                    <CardTitle className="text-base font-display flex items-center gap-2"><Activity className="w-4 h-4" />Activity log</CardTitle>
-                    <CardDescription>Notes, tasks, and milestones over time</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex gap-2">
-                      <Textarea
-                        placeholder="What changed? (e.g. 'Reviewed design with team', 'Shipped beta')"
-                        rows={2}
-                        value={noteDraft}
-                        onChange={(e) => setNoteDraft(e.target.value)}
-                      />
-                      <Button onClick={handleAddNote} className="self-stretch"><FileText className="w-4 h-4" />Log</Button>
-                    </div>
-                    <div className="relative space-y-3 pt-2">
-                      {(selected.activities || []).map((a, i) => {
-                        const Icon = activityIcon[a.type as keyof typeof activityIcon] || Activity;
+                <TabsContent value="tasks" className="mt-4">
+                  <Card className="border-border/40">
+                    <CardContent className="p-4 space-y-2">
+                      {projectTasks.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No tasks linked yet</p>}
+                      {projectTasks.map((t) => {
+                        const prog = taskProgress(t);
                         return (
-                          <div key={a.id} className="flex gap-3 animate-in-up" style={{ animationDelay: `${i * 40}ms` }}>
-                            <div className="flex flex-col items-center">
-                              <span className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                              </span>
-                              {i < selected.activities.length - 1 && <span className="w-px flex-1 bg-border my-1" />}
+                          <div key={t.id} className="p-3 rounded-lg hover:bg-muted/30 transition-colors border-b border-border/20 last:border-b-0 animate-in-up">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("w-2 h-2 rounded-full",
+                                t.priority === "high" && "bg-destructive",
+                                t.priority === "medium" && "bg-warning",
+                                t.priority === "low" && "bg-success",
+                              )} />
+                              <p className={cn("text-sm font-medium flex-1 truncate", t.status === "done" && "line-through text-muted-foreground")}>{t.title}</p>
+                              <span className="text-xs text-muted-foreground tabular-nums">{prog}%</span>
                             </div>
-                            <div className="flex-1 pb-3">
-                              <p className="text-sm">{a.message}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {format(new Date(a.createdAt), "MMM d, yyyy · h:mm a")}
-                              </p>
-                            </div>
+                            <Progress value={prog} className="h-1 mt-2" />
                           </div>
                         );
                       })}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="activity" className="mt-4">
+                  <Card className="border-border/40">
+                    <CardContent className="p-4 space-y-4">
+                      {/* Add note input */}
+                      <div className="flex gap-2">
+                        <Textarea
+                          placeholder="What changed? (e.g. 'Reviewed design with team')"
+                          rows={2}
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleAddNote(); } }}
+                          className="text-sm"
+                        />
+                        <Button onClick={handleAddNote} className="self-stretch"><FileText className="w-4 h-4" />Log</Button>
+                      </div>
+
+                      {/* Enhanced timeline */}
+                      <div className="relative space-y-0 pt-2">
+                        {(selected.activities || []).map((a, i) => {
+                          const Icon = activityIcon[a.type as keyof typeof activityIcon] || Activity;
+                          const dotColor = activityDotColor[a.type] || "bg-muted-foreground";
+                          const isLatest = i === 0;
+                          return (
+                            <div key={a.id} className="flex gap-3 animate-in-up group" style={{ animationDelay: `${i * 40}ms` }}>
+                              <div className="flex flex-col items-center">
+                                <span className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors",
+                                  isLatest
+                                    ? `${dotColor} border-transparent`
+                                    : "bg-muted border-border/40"
+                                )}>
+                                  <Icon className={cn("w-3.5 h-3.5", isLatest ? "text-white" : "text-muted-foreground")} />
+                                </span>
+                                {i < selected.activities.length - 1 && <span className="w-px flex-1 bg-border/40 my-1" />}
+                              </div>
+                              <div className="flex-1 pb-4 hover:bg-muted/20 rounded-lg px-2 py-1 -mx-2 transition-colors">
+                                <p className="text-sm">{a.message}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+                                  <span className="mx-1.5 text-border">·</span>
+                                  {format(new Date(a.createdAt), "MMM d, h:mm a")}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {(selected.activities || []).length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-6">No activity yet — add a note above.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             )}
             {isExternal && (
-               <Card className="shadow-card border-border/60 animate-in-up py-12 text-center">
+               <Card className="border-border/40 animate-in-up py-12 text-center">
                   <CardContent>
                     <Folder className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
                     <p className="text-muted-foreground max-w-xs mx-auto">This project is managed in your Portfolio. Workspace tracking (tasks/activity) is only available for local projects.</p>
@@ -335,7 +370,7 @@ export default function ProjectsPage() {
             )}
           </div>
         ) : (
-          <Card className="lg:col-span-2 shadow-card border-border/60 border-dashed">
+          <Card className="lg:col-span-2 border-border/40 border-dashed">
             <CardContent className="py-16 text-center text-muted-foreground">Create a project to get started</CardContent>
           </Card>
         )}

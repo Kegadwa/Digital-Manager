@@ -4,17 +4,26 @@ import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Folder } from "lucide-react";
+import { SlideDrawer } from "@/components/ui/slide-drawer";
+import { ChevronLeft, ChevronRight, Folder, CalendarDays, Clock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { useTasks, useProjects } from "@/store/useAppStore";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfMonth, startOfWeek, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
+
+const priorityColor = {
+  high: "bg-destructive",
+  medium: "bg-warning",
+  low: "bg-success",
+};
 
 export default function CalendarPage() {
   const { tasks } = useTasks();
   const { projects } = useProjects();
   const [cursor, setCursor] = useState(new Date());
   const [selected, setSelected] = useState(new Date());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDate, setDrawerDate] = useState<Date | null>(null);
 
   const tasksList = tasks || [];
   const projectsList = projects || [];
@@ -35,7 +44,24 @@ export default function CalendarPage() {
     return map;
   }, [tasksList]);
 
+  // Heatmap intensity for the month
+  const maxTasks = useMemo(
+    () => Math.max(...Object.values(tasksByDay).map((t) => t.length), 1),
+    [tasksByDay]
+  );
+
   const selectedTasks = tasksByDay[format(selected, "yyyy-MM-dd")] || [];
+  const drawerTasks = drawerDate ? tasksByDay[format(drawerDate, "yyyy-MM-dd")] || [] : [];
+
+  const handleDayClick = (d: Date) => {
+    setSelected(d);
+    const k = format(d, "yyyy-MM-dd");
+    const dayTasks = tasksByDay[k] || [];
+    if (dayTasks.length > 0) {
+      setDrawerDate(d);
+      setDrawerOpen(true);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -52,8 +78,43 @@ export default function CalendarPage() {
         }
       />
 
+      {/* ── Day Detail Drawer ── */}
+      <SlideDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        title={drawerDate ? format(drawerDate, "EEEE, MMMM d") : ""}
+        description={`${drawerTasks.length} task${drawerTasks.length !== 1 ? "s" : ""} scheduled`}
+      >
+        <div className="space-y-3">
+          {drawerTasks.map((t, i) => {
+            const project = projectsList.find((p) => p.id === t.projectId);
+            return (
+              <div key={t.id} className="p-3 rounded-lg border border-border/40 hover:bg-muted/30 transition-colors animate-in-up" style={{ animationDelay: `${i * 40}ms` }}>
+                <div className="flex items-center gap-2">
+                  <div className={cn("w-2 h-2 rounded-full shrink-0", priorityColor[t.priority as keyof typeof priorityColor] || "bg-muted")} />
+                  <p className={cn("text-sm font-medium flex-1", t.status === "done" && "line-through text-muted-foreground")}>{t.title}</p>
+                  <Badge variant="secondary" className="text-[10px]">{t.status}</Badge>
+                </div>
+                {(project || t.category) && (
+                  <div className="flex flex-wrap gap-1 mt-2 ml-4">
+                    {project && (
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        <Folder className="w-2.5 h-2.5" style={{ color: project.color }} />
+                        {project.name}
+                      </Badge>
+                    )}
+                    {t.category && <Badge variant="outline" className="text-[10px]">{t.category}</Badge>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </SlideDrawer>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-        <Card className="lg:col-span-2 shadow-card border-border/60 animate-in-up">
+        {/* ── Calendar Grid ── */}
+        <Card className="lg:col-span-2 border-border/40 animate-in-up">
           <CardContent className="p-3 sm:p-4">
             <div className="grid grid-cols-7 gap-1 mb-2">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
@@ -67,33 +128,41 @@ export default function CalendarPage() {
                 const inMonth = isSameMonth(d, cursor);
                 const today = isToday(d);
                 const isSelected = isSameDay(d, selected);
+                const intensity = dayTasks.length / maxTasks;
                 return (
                   <button
                     key={k}
-                    onClick={() => setSelected(d)}
+                    onClick={() => handleDayClick(d)}
                     className={cn(
-                      "aspect-square sm:aspect-auto sm:min-h-[72px] p-1.5 sm:p-2 rounded-lg text-left transition-all border animate-in-up",
-                      inMonth ? "bg-card" : "bg-muted/30 text-muted-foreground/50",
-                      isSelected ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-border",
+                      "aspect-square sm:aspect-auto sm:min-h-[72px] p-1.5 sm:p-2 rounded-lg text-left transition-all border animate-in-up relative",
+                      inMonth ? "bg-card" : "bg-muted/20 text-muted-foreground/40",
+                      isSelected ? "border-primary ring-1 ring-primary/50" : "border-transparent hover:border-border/60",
                     )}
                     style={{ animationDelay: `${Math.min(idx * 8, 200)}ms` }}
                   >
+                    {/* Heatmap background */}
+                    {dayTasks.length > 0 && inMonth && (
+                      <div
+                        className="absolute inset-0 rounded-lg pointer-events-none"
+                        style={{ background: `hsl(var(--primary) / ${0.04 + intensity * 0.12})` }}
+                      />
+                    )}
                     <div className={cn(
-                      "text-xs sm:text-sm font-medium inline-flex items-center justify-center w-6 h-6 rounded-full",
+                      "text-xs sm:text-sm font-medium inline-flex items-center justify-center w-6 h-6 rounded-full relative",
                       today && "bg-primary text-primary-foreground"
                     )}>{format(d, "d")}</div>
+                    {/* Desktop: priority-colored dots */}
                     <div className="mt-1 hidden sm:flex flex-wrap gap-0.5">
                       {dayTasks.slice(0, 3).map((t) => (
                         <div key={t.id} className={cn(
-                          "h-1.5 rounded-full w-full",
-                          t.priority === "high" && "bg-destructive",
-                          t.priority === "medium" && "bg-warning",
-                          t.priority === "low" && "bg-success",
+                          "w-1.5 h-1.5 rounded-full",
+                          priorityColor[t.priority as keyof typeof priorityColor] || "bg-muted-foreground",
                         )} />
                       ))}
-                      {dayTasks.length > 3 && <span className="text-[10px] text-muted-foreground">+{dayTasks.length - 3}</span>}
+                      {dayTasks.length > 3 && <span className="text-[9px] text-muted-foreground leading-none ml-0.5">+{dayTasks.length - 3}</span>}
                     </div>
-                    {dayTasks.length > 0 && <div className="sm:hidden mt-1 w-1 h-1 rounded-full bg-primary mx-auto" />}
+                    {/* Mobile: single dot indicator */}
+                    {dayTasks.length > 0 && <div className="sm:hidden mt-1 w-1.5 h-1.5 rounded-full bg-primary mx-auto" />}
                   </button>
                 );
               })}
@@ -101,29 +170,31 @@ export default function CalendarPage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-card border-border/60 animate-in-up stagger-1">
+        {/* ── Sidebar: day detail ── */}
+        <Card className="border-border/40 animate-in-up stagger-1">
           <CardHeader>
-            <CardTitle className="text-base font-display">{format(selected, "EEEE, MMM d")}</CardTitle>
+            <CardTitle className="text-base font-display flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" />
+              {format(selected, "EEEE, MMM d")}
+            </CardTitle>
             <CardDescription>{selectedTasks.length} task{selectedTasks.length !== 1 ? "s" : ""}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {selectedTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Nothing scheduled</p>
+              <div className="text-center py-8 space-y-2">
+                <Clock className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground">Nothing scheduled</p>
+              </div>
             ) : (
               selectedTasks.map((t, i) => {
                 const project = projectsList.find((p) => p.id === t.projectId);
                 return (
-                  <div key={t.id} className="p-3 rounded-lg border border-border/60 hover:bg-muted/40 transition-colors animate-in-up" style={{ animationDelay: `${i * 40}ms` }}>
+                  <div key={t.id} className="p-3 rounded-lg hover:bg-muted/30 transition-colors border-b border-border/20 last:border-b-0 animate-in-up" style={{ animationDelay: `${i * 40}ms` }}>
                     <div className="flex items-center gap-2">
-                      <div className={cn(
-                        "w-2 h-2 rounded-full shrink-0",
-                        t.priority === "high" && "bg-destructive",
-                        t.priority === "medium" && "bg-warning",
-                        t.priority === "low" && "bg-success",
-                      )} />
+                      <div className={cn("w-2 h-2 rounded-full shrink-0", priorityColor[t.priority as keyof typeof priorityColor] || "bg-muted")} />
                       <p className={cn("text-sm font-medium flex-1 truncate", t.status === "done" && "line-through text-muted-foreground")}>{t.title}</p>
                     </div>
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-2 ml-4">
                       {project && (
                         <Badge variant="secondary" className="text-[10px] gap-1">
                           <Folder className="w-2.5 h-2.5" style={{ color: project.color }} />
